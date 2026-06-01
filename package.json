@@ -5,9 +5,8 @@
   "main": "electron/main.js",
   "type": "commonjs",
   "scripts": {
-    "dev": "concurrently -k -p \"[{name}]\" -n \"Server,Vite,Electron\" -c \"yellow,cyan,green\" \"npm run server\" \"vite\" \"electron .\"",
-    "server": "nodemon server/index.js",
     "build": "vite build",
+    "server": "node server/index.js",
     "dist": "npm run build && electron-builder"
   },
   "build": {
@@ -17,11 +16,20 @@
       "electron/**/*",
       "dist/**/*"
     ],
-    "directories": {
-      "output": "release"
-    },
-    "win": {
-      "target": "nsis"
-    }
+    "directories": { "output": "release" },
+    "win": { "target": "nsis" }
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3",
+    "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.7.5"
   }
 }
