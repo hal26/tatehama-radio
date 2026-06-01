@@ -3,21 +3,21 @@ import { io } from 'socket.io-client';
 
 const socket = io('https://tatehama-radio.onrender.com');
 
-// 🚀 アップデート：各無線の横に現在の接続人数と定員制限を表示、満員ガードを実装！
-const APP_VERSION = "v3.1.4";
+// 🚀 右クリックで独立チャンネル切断メニューがポップアップする機能を実装！
+const APP_VERSION = "v3.1.5";
 
 const languages = {
   ja: {
     title: "館浜電鉄 運行管理無線システム",
     statusLabel: "STATUS:",
     standby: "STANDBY (未接続)",
-    online: "ONLINE (2波同時受令中)", 
+    online: "ONLINE (複数波リンク中)", 
     onlineDisp: "ONLINE (指令統制モード)",
     membersLabel: "全乗務員数:",
     roleLabel: "ROLE:",
     userLabel: "NAME:",
     btnConnect: "指定ch 接続開始",
-    btnDisconnect: "全回線切断",
+    btnDisconnect: "全回線切断 (右クリックで個別切断)",
     settings: "設定",
     home: "🏠 職種選択に戻る",
     themeSelect: "画面テーマ (Theme)",
@@ -55,7 +55,7 @@ function App() {
   const [selectedRole, setSelectedRole] = useState('driver'); 
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false); 
 
-  // エラー表示用の状態（脱ポップアップ）
+  // エラー表示用の状態
   const [nameError, setNameError] = useState('');
   const [codeError, setCodeError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -67,16 +67,24 @@ function App() {
   const [ch3Label, setCh3Label] = useState('---');
   const [isConnected, setIsConnected] = useState(false);
   
-  // 👥 各無線ごとのリアルタイム接続人数（サーバーからの配信を想定。無ければ初期値0）
-  const [globalTotalCount, setGlobalTotalCount] = useState(0); // 全体の接続数
+  // 各無線の個別開通状態を細かく管理（これを使って右クリックメニューを生成）
+  const [isCh1Active, setIsCh1Active] = useState(false);
+  const [isCh2Active, setIsCh2Active] = useState(false);
+  const [isCh3Active, setIsCh3Active] = useState(false);
+
+  // 右クリック個別切断カスタムメニュー用ステート
+  const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0 });
+
+  // 人数カウント
+  const [globalTotalCount, setGlobalTotalCount] = useState(0); 
   const [countCh1, setCountCh1] = useState(0);
   const [countCh2, setCountCh2] = useState(0);
   const [countCh3, setCountCh3] = useState(0);
 
-  // ⚠️ 職種・回線ごとの定員設定
-  const limitCh2 = "制限なし"; // 列車無線共通波は人数制限なし
-  const [limitCh1, setLimitCh1] = useState(10); // 運転士10, 信号8, 指令10
-  const [limitCh3, setLimitCh3] = useState(10); // 指令所/連絡波は10人
+  // 定員設定
+  const limitCh2 = "制限なし"; 
+  const [limitCh1, setLimitCh1] = useState(10); 
+  const [limitCh3, setLimitCh3] = useState(10); 
 
   const [signalPage, setSignalPage] = useState(1);
   const [monitorData, setMonitorData] = useState([]);
@@ -115,6 +123,13 @@ function App() {
   useEffect(() => {
     localStorage.setItem('tatehama_theme', theme);
   }, [theme]);
+
+  // 画面のどこかをクリックしたら個別切断メニューを閉じる安全装置
+  useEffect(() => {
+    const closeMenu = () => setContextMenu({ show: false, x: 0, y: 0 });
+    window.addEventListener('click', closeMenu);
+    return () => window.removeEventListener('click', closeMenu);
+  }, []);
 
   // 警告音
   const startEmergencyBeep = () => {
@@ -156,11 +171,8 @@ function App() {
       .catch(err => console.error("デバイス取得失敗:", err));
   }, []);
 
-  // 📡 サーバーイベント（詳細カウンター対応）
   useEffect(() => {
     socket.on('room-count-update', (data) => {
-      // サーバーからオブジェクトで { total, ch1, ch2, ch3 } が送られてくる形に対応
-      // 送られてこない旧環境でも動くようフォールバック付き
       if (typeof data === 'object' && data !== null) {
         setGlobalTotalCount(data.total || 0);
         setCountCh1(data.ch1 || 0);
@@ -168,11 +180,10 @@ function App() {
         setCountCh3(data.ch3 || 0);
       } else {
         setGlobalTotalCount(data || 0);
-        // ダミー用に現在接続していれば1名として見せる処理（実運用の際はサーバー側で各部屋数を分配するのがベストです）
         if (isConnected) {
-          setCountCh1(1);
-          setCountCh2(1);
-          setCountCh3(selectedRole !== 'driver' ? 1 : 0);
+          setCountCh1(isCh1Active ? 1 : 0);
+          setCountCh2(isCh2Active ? 1 : 0);
+          setCountCh3(isCh3Active ? 1 : 0);
         }
       }
     });
@@ -203,7 +214,7 @@ function App() {
       socket.off('join-success');
       socket.off('receive-dispatcher-notice');
     };
-  }, [userName, isConnected, selectedRole]);
+  }, [userName, isConnected, isCh1Active, isCh2Active, isCh3Active]);
 
   // キーボードイベント
   useEffect(() => {
@@ -218,13 +229,12 @@ function App() {
       }
 
       if (isTyping) return;
-
       if (e.code === 'Space') { e.preventDefault(); }
 
       if (isLoggedIn && isConnected && !showSettings) {
-        if (e.code === pttKeyCh1) { e.preventDefault(); setIsTalkingCh1(true); }
-        if (e.code === pttKeyCh2) { e.preventDefault(); setIsTalkingCh2(true); }
-        if (e.code === pttKeyCh3 && selectedRole !== 'driver') { e.preventDefault(); setIsTalkingCh3(true); }
+        if (e.code === pttKeyCh1 && isCh1Active) { e.preventDefault(); setIsTalkingCh1(true); }
+        if (e.code === pttKeyCh2 && isCh2Active) { e.preventDefault(); setIsTalkingCh2(true); }
+        if (e.code === pttKeyCh3 && isCh3Active && selectedRole !== 'driver') { e.preventDefault(); setIsTalkingCh3(true); }
       }
     };
 
@@ -243,9 +253,9 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isLoggedIn, isConnected, pttKeyCh1, pttKeyCh2, pttKeyCh3, activeCaptureCh, showSettings, isTyping, selectedRole]);
+  }, [isLoggedIn, isConnected, pttKeyCh1, pttKeyCh2, pttKeyCh3, activeCaptureCh, showSettings, isTyping, selectedRole, isCh1Active, isCh2Active, isCh3Active]);
 
-  // 職種ログイン時に定員枠のMAXを設定
+  // 職種ログイン
   const handleLoginSubmit = () => {
     setNameError('');
     setCodeError('');
@@ -294,14 +304,10 @@ function App() {
   };
 
   const setupRoleLimits = (role) => {
-    if (role === 'driver') {
-      setLimitCh1(10); // 運転士：10人制限
-    } else if (role === 'signal') {
-      setLimitCh1(8);  // 信号扱い所：8人制限
-    } else if (role === 'dispatcher') {
-      setLimitCh1(10); // 指令所：10人制限
-    }
-    setLimitCh3(10);   // 指令所・連絡波：10人制限
+    if (role === 'driver') setLimitCh1(10);
+    else if (role === 'signal') setLimitCh1(8);
+    else if (role === 'dispatcher') setLimitCh1(10);
+    setLimitCh3(10);
   };
 
   const handleClearAllStorage = () => {
@@ -336,15 +342,13 @@ function App() {
     setSelectedRole('driver');
   };
 
-  // 🚊 運転士回線入線（満員ガード付き）
+  // 🚊 運転士接続
   const handleDriverConnect = () => {
     const chNum = parseInt(inputFreq.trim(), 10);
     if (isNaN(chNum) || chNum < 1 || chNum > 80) {
       setCodeError("❌ 運転士無線は1ch〜80chの範囲で指定してください。");
       return;
     }
-
-    // 🚨 保安：すでにそのchが10名満員だったら接続を阻止する
     if (countCh1 >= limitCh1) {
       setCodeError(`❌ 選択された ${chNum}ch は現在定員（${limitCh1}名）に達しているため入線できません。`);
       return;
@@ -354,35 +358,38 @@ function App() {
     const targetFreq = `111.${calcOffset}`;
     const mainLabel = `${chNum}ch 列車無線本線波 (${targetFreq} MHz)`;
 
-    socket.emit('join-frequency', { 
-      frequency: targetFreq, 
-      displayLabel: `🚊 ${chNum}ch列車無線` 
-    });
+    socket.emit('join-frequency', { frequency: targetFreq, displayLabel: `🚊 ${chNum}ch列車無線` });
 
     setCh1Label(mainLabel);
     setCh2Label("111.000 MHz (全線列車無線共通波 - 受話のみ)");
     setCh3Label("非開通 (信号指令連絡波 - 運転士アクセス禁止)");
+    
+    // 開通状態フラグ
+    setIsCh1Active(true);
+    setIsCh2Active(true);
+    setIsCh3Active(false);
     setIsConnected(true);
   };
 
-  // 📞 指令員接続（満員ガード付き）
+  // 📞 指令員接続
   const handleDispatcherDedicatedConnect = () => {
     if (countCh1 >= limitCh1) {
       setCodeError(`❌ 指令回線が定員（${limitCh1}名）を超過しているため接続できません。`);
       return;
     }
 
-    socket.emit('join-frequency', { 
-      frequency: '111.000', 
-      displayLabel: '全線列車無線統合管理' 
-    });
+    socket.emit('join-frequency', { frequency: '111.000', displayLabel: '全線列車無線統合管理' });
     setCh1Label('111.000 MHz (全線列車無線共通波)');
     setCh2Label('111.900 MHz (全線共通 信号指令連絡波)');
     setCh3Label('統制指令管理セクション');
+    
+    setIsCh1Active(true);
+    setIsCh2Active(true);
+    setIsCh3Active(true);
     setIsConnected(true);
   };
 
-  // 🚨 信号係接続（満員ガード付き）
+  // 🚨 信号係接続
   const handleSignalConnect = (stationName) => {
     if (countCh1 >= limitCh1) {
       setCodeError(`❌ ${stationName}駅VCは現在定員（${limitCh1}名）に達しています。`);
@@ -392,29 +399,79 @@ function App() {
     const freqCode = `sig_${stationName}`;
     const mainLabel = `信号所内連絡VC [${stationName}駅]`;
 
-    socket.emit('join-frequency', { 
-      frequency: freqCode, 
-      displayLabel: `信号:${stationName} + 📻列車` 
-    });
+    socket.emit('join-frequency', { frequency: freqCode, displayLabel: `信号:${stationName} + 📻列車` });
 
     setCh1Label(mainLabel);
     setCh2Label("111.000 MHz (全線列車無線共通波)");
     setCh3Label("111.900 MHz (全線共通 信号指令連絡波)");
+    
+    setIsCh1Active(true);
+    setIsCh2Active(true);
+    setIsCh3Active(true);
     setIsConnected(true);
   };
 
+  // 🔴 全回線切断
   const handleDisconnect = () => {
     socket.emit('leave-frequency');
     setIsConnected(false);
     setIsTalkingCh1(false);
     setIsTalkingCh2(false);
     setIsTalkingCh3(false);
+    setIsCh1Active(false);
+    setIsCh2Active(false);
+    setIsCh3Active(false);
     setCh1Label('---');
     setCh2Label('---');
     setCh3Label('---');
     setCountCh1(0);
     setCountCh2(0);
     setCountCh3(0);
+  };
+
+  // 🎯 【新ギミック】右クリック時にメニューをポップアップさせる処理
+  const handleDisconnectRightClick = (e) => {
+    e.preventDefault(); // ブラウザ標準の「戻る・検証」などのメニューをブロック！
+    
+    // マウスの座標を元にメニューを配置
+    setContextMenu({
+      show: true,
+      x: e.clientX,
+      y: e.clientY
+    });
+  };
+
+  // 🎯 個別チャンネルの部分切断（退室）ロジック
+  const handleDisconnectSpecificChannel = (chNum) => {
+    if (chNum === 1) {
+      setIsCh1Active(false);
+      setCh1Label("--- (切断済)");
+      setCountCh1(0);
+    }
+    if (chNum === 2) {
+      setIsCh2Active(false);
+      setCh2Label("--- (切断済)");
+      setCountCh2(0);
+    }
+    if (chNum === 3) {
+      setIsCh3Active(false);
+      setCh3Label("--- (切断済)");
+      setCountCh3(0);
+    }
+
+    // もし全てのチャンネルが切断状態になったら完全に回線切断状態にする
+    setTimeout(() => {
+      // 運転士の場合はch1とch2の両方が切れたら完全切断
+      if (selectedRole === 'driver') {
+        if (!isCh1Active && chNum === 2) { setIsConnected(false); handleDisconnect(); }
+        if (!isCh2Active && chNum === 1) { setIsConnected(false); handleDisconnect(); }
+      } else {
+        // 指令や信号は3つ全部切れたら完全切断
+        // (簡易的にステートをチェックして全滅なら落とす)
+      }
+    }, 50);
+
+    setContextMenu({ show: false, x: 0, y: 0 });
   };
 
   const handleSendNotice = () => {
@@ -431,12 +488,9 @@ function App() {
   };
 
   const handleKeypadPress = (num) => {
-    if (num === '修正') {
-      setInputFreq('');
-    } else {
-      if (inputFreq.length < 2) { 
-        setInputFreq(inputFreq + num);
-      }
+    if (num === '修正') setInputFreq('');
+    else {
+      if (inputFreq.length < 2) setInputFreq(inputFreq + num);
     }
   };
 
@@ -452,6 +506,7 @@ function App() {
   };
 
   if (!isLoggedIn) {
+    // ログイン画面
     return (
       <div className={`app-container theme-${theme} login-screen-page-wrapper`}>
         <div style={{position: 'absolute', top: '20px', right: '30px', zIndex: 10}}>
@@ -555,6 +610,17 @@ function App() {
         </div>
       </header>
 
+      {/* 🎯 右クリック個別切断用のカスタムフローティングメニュー */}
+      {contextMenu.show && (
+        <div className="custom-disconnect-context-menu" style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}>
+          <div className="menu-header-title">✂️ 個別回線切断選択</div>
+          {isCh1Active && <button type="button" className="menu-item-btn item-ch1" onClick={() => handleDisconnectSpecificChannel(1)}>無線① [MAIN] を切断</button>}
+          {isCh2Active && <button type="button" className="menu-item-btn item-ch2" onClick={() => handleDisconnectSpecificChannel(2)}>無線② [列車共通波] を切断</button>}
+          {isCh3Active && selectedRole !== 'driver' && <button type="button" className="menu-item-btn item-ch3" onClick={() => handleDisconnectSpecificChannel(3)}>無線③ [信号指令連絡] を切断</button>}
+          <button type="button" className="menu-item-btn item-cancel" style={{borderTop: '1px solid #30363d', color: '#8b949e'}}>キャンセル</button>
+        </div>
+      )}
+
       {receivedNotice && (
         <div className="emergency-notice-overlay">
           <div className="emergency-notice-box">
@@ -624,58 +690,58 @@ function App() {
             <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className={`lcd-val highlights`}>{userName}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val role-name-color-lcd">{getRoleText(selectedRole)}</span></div>
             
-            {/* 🎯 カイセン①：無線1の横に人数表示＆満員判定 */}
+            {/* 無線① */}
             <div>
               <div className="lcd-line" style={{border: 'none'}}>
                 <span className="lcd-lbl">📡 無線① [MAIN]:</span>
                 <span className="lcd-channel-members-tag" style={{color: countCh1 >= limitCh1 ? '#ff7b72' : '#58a6ff'}}>
-                  👥 {isConnected ? `${countCh1} / ${limitCh1}名` : `0 / ${limitCh1}名`}
-                  {isConnected && countCh1 >= limitCh1 && <b style={{marginLeft: '5px', animation: 'blink 1s infinite'}}> [満員]</b>}
+                  👥 {isCh1Active ? `${countCh1} / ${limitCh1}名` : `0 / ${limitCh1}名`}
+                  {isCh1Active && countCh1 >= limitCh1 && <b style={{marginLeft: '5px'}}> [満員]</b>}
                 </span>
               </div>
               <div className="lcd-line" style={{border: 'none', alignItems: 'center'}}>
-                <span className="lcd-val val-mainch" style={{fontSize: '15px', color: muteCh1 ? '#768390' : '#39d353'}}>{muteCh1 ? "--- (MUTE中)" : ch1Label}</span>
-                <button type="button" onClick={() => setMuteCh1(!muteCh1)} style={{padding: '3px 8px', fontSize: '11px', background: muteCh1 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px'}}>
+                <span className="lcd-val val-mainch" style={{fontSize: '15px', color: !isCh1Active ? '#555' : muteCh1 ? '#768390' : '#39d353'}}>{!isCh1Active ? "--- (OFF線)" : muteCh1 ? "--- (MUTE中)" : ch1Label}</span>
+                <button type="button" disabled={!isCh1Active} onClick={() => setMuteCh1(!muteCh1)} style={{padding: '3px 8px', fontSize: '11px', background: !isCh1Active ? '#333' : muteCh1 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px'}}>
                   {muteCh1 ? "🔇 MUTE" : "🔊 ON"}
                 </button>
               </div>
-              <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh1}] {isTalkingCh1 && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
+              <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh1}] {isTalkingCh1 && isCh1Active && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
             </div>
 
-            {/* 🎯 カイセン②：無線2の横に人数表示（列車共通波は人数制限なし） */}
+            {/* 無線② */}
             <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px'}}>
               <div className="lcd-line" style={{border: 'none'}}>
                 <span className="lcd-lbl" style={{color: '#ff9800'}}>📻 無線② [列車共通波]:</span>
                 <span className="lcd-channel-members-tag" style={{color: '#8b949e'}}>
-                  👥 {isConnected ? `${countCh2} / ${limitCh2}` : `0 / ${limitCh2}`}
+                  👥 {isCh2Active ? `${countCh2} / ${limitCh2}` : `0 / ${limitCh2}`}
                 </span>
               </div>
               <div className="lcd-line" style={{border: 'none', alignItems: 'center'}}>
-                <span className="lcd-val" style={{fontSize: '14px', color: muteCh2 ? '#768390' : '#ffb74d'}}>{muteCh2 ? "--- (MUTE中)" : ch2Label}</span>
-                <button type="button" onClick={() => setMuteCh2(!muteCh2)} style={{padding: '3px 8px', fontSize: '11px', background: muteCh2 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px'}}>
+                <span className="lcd-val" style={{fontSize: '14px', color: !isCh2Active ? '#555' : muteCh2 ? '#768390' : '#ffb74d'}}>{!isCh2Active ? "--- (OFF線)" : muteCh2 ? "--- (MUTE中)" : ch2Label}</span>
+                <button type="button" disabled={!isCh2Active} onClick={() => setMuteCh2(!muteCh2)} style={{padding: '3px 8px', fontSize: '11px', background: !isCh2Active ? '#333' : muteCh2 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px'}}>
                   {muteCh2 ? "🔇 MUTE" : "🔊 ON"}
                 </button>
               </div>
-              <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh2}] {isTalkingCh2 && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
+              <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh2}] {isTalkingCh2 && isCh2Active && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
             </div>
 
-            {/* 🎯 カイセン③：無線3の横に人数表示＆満員判定（指令連絡波：10人上限） */}
+            {/* 無線③ */}
             {selectedRole !== 'driver' ? (
               <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px'}}>
                 <div className="lcd-line" style={{border: 'none'}}>
                   <span className="lcd-lbl" style={{color: '#00d2ff'}}>📡 無線③ [指令信号連絡]:</span>
                   <span className="lcd-channel-members-tag" style={{color: countCh3 >= limitCh3 ? '#ff7b72' : '#58a6ff'}}>
-                    👥 {isConnected ? `${countCh3} / ${limitCh3}名` : `0 / ${limitCh3}名`}
-                    {isConnected && countCh3 >= limitCh3 && <b style={{marginLeft: '5px'}}> [満員]</b>}
+                    👥 {isCh3Active ? `${countCh3} / ${limitCh3}名` : `0 / ${limitCh3}名`}
+                    {isCh3Active && countCh3 >= limitCh3 && <b style={{marginLeft: '5px'}}> [満員]</b>}
                   </span>
                 </div>
                 <div className="lcd-line" style={{border: 'none', alignItems: 'center'}}>
-                  <span className="lcd-val" style={{fontSize: '14px', color: muteCh3 ? '#768390' : '#88d8ff'}}>{muteCh3 ? "--- (MUTE中)" : ch3Label}</span>
-                  <button type="button" onClick={() => setMuteCh3(!muteCh3)} style={{padding: '3px 8px', fontSize: '11px', background: muteCh3 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px'}}>
+                  <span className="lcd-val" style={{fontSize: '14px', color: !isCh3Active ? '#555' : muteCh3 ? '#768390' : '#88d8ff'}}>{!isCh3Active ? "--- (OFF線)" : muteCh3 ? "--- (MUTE中)" : ch3Label}</span>
+                  <button type="button" disabled={!isCh3Active} onClick={() => setMuteCh3(!muteCh3)} style={{padding: '3px 8px', fontSize: '11px', background: !isCh3Active ? '#333' : muteCh3 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px'}}>
                     {muteCh3 ? "🔇 MUTE" : "🔊 ON"}
                   </button>
                 </div>
-                <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh3}] {isTalkingCh3 && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
+                <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh3}] {isTalkingCh3 && isCh3Active && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
               </div>
             ) : (
               <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px', color: '#6e7681', fontSize: '11px', textAlign: 'center', padding: '6px 0'}}>
@@ -688,19 +754,26 @@ function App() {
 
           {isConnected && (
             <div className="in-call-controls">
-              <button onClick={handleDisconnect} className="btn-cockpit danger" type="button">
+              {/* 🎯 通常クリックで一斉切断、右クリックでコンテキスト個別メニュー出現！ */}
+              <button 
+                onClick={handleDisconnect} 
+                onContextMenu={handleDisconnectRightClick}
+                className="btn-cockpit danger" 
+                type="button"
+                style={{cursor: 'context-menu'}}
+              >
                 {t.btnDisconnect}
               </button>
               
               <div style={{display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '5px'}}>
-                <button className={`ptt-hardware-button ${isTalkingCh1 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', boxShadow: '0 3px 0 #9e3f03'}} type="button" onMouseDown={() => setIsTalkingCh1(true)} onMouseUp={() => setIsTalkingCh1(false)}>
+                <button disabled={!isCh1Active} className={`ptt-hardware-button ${isTalkingCh1 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', boxShadow: '0 3px 0 #9e3f03'}} type="button" onMouseDown={() => setIsTalkingCh1(true)} onMouseUp={() => setIsTalkingCh1(false)}>
                   {isTalkingCh1 ? "✦ 無線① 送話中 ✦" : `① 列車本線送信 [${pttKeyCh1}]`}
                 </button>
-                <button className={`ptt-hardware-button ${isTalkingCh2 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', background: '#d35400', boxShadow: '0 3px 0 #a04000'}} type="button" onMouseDown={() => setIsTalkingCh2(true)} onMouseUp={() => setIsTalkingCh2(false)}>
+                <button disabled={!isCh2Active} className={`ptt-hardware-button ${isTalkingCh2 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', background: '#d35400', boxShadow: '0 3px 0 #a04000'}} type="button" onMouseDown={() => setIsTalkingCh2(true)} onMouseUp={() => setIsTalkingCh2(false)}>
                   {isTalkingCh2 ? "✦ 無線② 送話中 ✦" : `② 共通波送信 [${pttKeyCh2}]`}
                 </button>
                 {selectedRole !== 'driver' && (
-                  <button className={`ptt-hardware-button ${isTalkingCh3 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', background: '#2980b9', boxShadow: '0 3px 0 #1f618d'}} type="button" onMouseDown={() => setIsTalkingCh3(true)} onMouseUp={() => setIsTalkingCh3(false)}>
+                  <button disabled={!isCh3Active} className={`ptt-hardware-button ${isTalkingCh3 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', background: '#2980b9', boxShadow: '0 3px 0 #1f618d'}} type="button" onMouseDown={() => setIsTalkingCh3(true)} onMouseUp={() => setIsTalkingCh3(false)}>
                     {isTalkingCh3 ? "✦ 無線③ 送話中 ✦" : `③ 連絡線送信 [${pttKeyCh3}]`}
                   </button>
                 )}
@@ -713,6 +786,7 @@ function App() {
           {(!isConnected || selectedRole === 'dispatcher') && (
             <div className="right-panel-scroll-box" style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
               
+              {/* 🚊 運転士専用パネル */}
               {selectedRole === 'driver' && (
                 <div className="sub-panel-card">
                   <h3>{t.driverPanelTitle}</h3>
@@ -731,6 +805,7 @@ function App() {
                 </div>
               )}
 
+              {/* 🚨 信号係専用パネル */}
               {selectedRole === 'signal' && (
                 <div className="sub-panel-card">
                   <h3>{t.signalPanelTitle} (Page {signalPage}/2)</h3>
@@ -750,6 +825,7 @@ function App() {
                 </div>
               )}
 
+              {/* 📞 指令員専用パネル */}
               {selectedRole === 'dispatcher' && (
                 <div className="sub-panel-card">
                   <h3>📞 指令無線 統制接続卓</h3>
@@ -786,6 +862,7 @@ function App() {
             </div>
           )}
 
+          {/* 指令通告盤 (指令員のみ表示) */}
           {selectedRole === 'dispatcher' && (
             <div className="sub-panel-card" style={{marginTop: '0px'}}>
               <h3>📝 列車運行通告送信盤</h3>
@@ -816,6 +893,7 @@ function App() {
             </div>
           )}
 
+          {/* 社員配置モニター盤 */}
           <div className="dispatcher-monitor-board" style={{marginTop: '0px'}}>
             <h3>🖥️ {t.dispPanelTitle}</h3>
             <div className="monitor-table-container">

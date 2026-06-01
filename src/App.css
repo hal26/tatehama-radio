@@ -263,3 +263,70 @@ body {
   50% { opacity: 0.4; }
   100% { opacity: 1; }
 }
+
+/* 🎯 右クリック個別開放メニュー専用CSS */
+.custom-disconnect-context-menu {
+  position: fixed;
+  background: #161b22;
+  border: 2px solid #f85149;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  z-index: 99999;
+  width: 250px;
+  overflow: hidden;
+  animation: menu-pop 0.1s ease-out;
+}
+.theme-light .custom-disconnect-context-menu {
+  background: #ffffff;
+  border-color: #d35400;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+}
+
+.menu-header-title {
+  background: #21262d;
+  color: #8b949e;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 12px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+.theme-light .menu-header-title {
+  background: #eaeef2;
+  color: #57606a;
+}
+
+.menu-item-btn {
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.theme-light .menu-item-btn {
+  color: #24292f;
+}
+
+.menu-item-btn:hover {
+  background: rgba(248, 81, 73, 0.15);
+}
+.theme-light .menu-item-btn:hover {
+  background: #fdf2f2;
+}
+
+.item-ch1 { color: #39d353 !important; }
+.theme-light .item-ch1 { color: #1a7f37 !important; }
+.item-ch2 { color: #ffb74d !important; }
+.theme-light .item-ch2 { color: #b76200 !important; }
+.item-ch3 { color: #88d8ff !important; }
+.theme-light .item-ch3 { color: #0969da !important; }
+
+@keyframes menu-pop {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
