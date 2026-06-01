@@ -10,9 +10,7 @@ const io = new Server(server, {
 
 const PORT = 3000;
 const bannedUsers = new Set();
-
-// 接続中ユーザーのリアルタイム位置情報データベース
-const activeUsers = {};
+const activeUsers = {}; // 接続中ユーザーのリアルタイム位置情報データベース
 
 io.on('connection', (socket) => {
   if (bannedUsers.has(socket.handshake.address) || bannedUsers.has(socket.id)) {
@@ -22,24 +20,23 @@ io.on('connection', (socket) => {
 
   console.log(`接続: ${socket.id}`);
 
-  // 乗務開始（ログイン）情報を受け取る
+  // 乗務開始（ログイン）
   socket.on('user-login', ({ name, role }) => {
     activeUsers[socket.id] = {
       id: socket.id,
       name: name || '名無し乗務員',
-      role: role, // driver, signal, dispatcher
+      role: role,
       location: '未接続'
     };
-    // 司令画面の更新のために全員へアナウンス
-    sendDispatcherUpdate();
+    // 全員に最新の配置データを同期
+    sendGlobalUserUpdate();
   });
 
-  // 周波数または信号VCへの接続
+  // 無線VCへの接続
   socket.on('join-frequency', ({ frequency, displayLabel }) => {
     const roomID = `room_${frequency.replace('.', '')}`;
     const room = io.sockets.adapter.rooms.get(roomID);
 
-    // 💥 【人数制限】5名以上の場合は接続拒否
     if (room && room.size >= 5) {
       socket.emit('join-failed', '定員（5名）に達しているため、このVCには入れません。');
       return;
@@ -57,38 +54,29 @@ io.on('connection', (socket) => {
     socket.currentRoom = roomID;
     socket.frequency = frequency;
 
-    // ユーザーの位置情報を更新
     if (activeUsers[socket.id]) {
       activeUsers[socket.id].location = displayLabel;
     }
 
     socket.emit('join-success', { frequency, displayLabel });
     updateRoomCount(roomID);
-    sendDispatcherUpdate();
+    sendGlobalUserUpdate();
   });
 
-  // ⚠️【管理者（司令）指令機能】
+  // 📝 【重要】指令員からの個別・一斉通告メッセージを中継して全社員に送る
+  socket.on('send-dispatcher-notice', (data) => {
+    console.log("通告中継送信:", data);
+    io.emit('receive-dispatcher-notice', data); // 全員に向けてブロードキャスト
+  });
+
+  // 管理者コマンド（強制切断など）
   socket.on('admin-command', ({ action, freq }) => {
     const roomID = `room_${freq.replace('.', '')}`;
-    if (action === 'KICK') {
-      io.to(roomID).emit('admin-force-disconnect');
-    } else if (action === 'MUTE') {
-      io.to(roomID).emit('admin-force-mute');
-    } else if (action === 'BLOCK') {
-      const room = io.sockets.adapter.rooms.get(roomID);
-      if (room) {
-        for (const clientId of room) {
-          const clientSocket = io.sockets.sockets.get(clientId);
-          if (clientSocket) {
-            bannedUsers.add(clientSocket.handshake.address);
-            clientSocket.disconnect(true);
-          }
-        }
-      }
-    }
+    if (action === 'KICK') io.to(roomID).emit('admin-force-disconnect');
+    if (action === 'MUTE') io.to(roomID).emit('admin-force-mute');
   });
 
-  // 切断処理（回線切断ボタン）
+  // 回線切断
   socket.on('leave-frequency', () => {
     if (socket.currentRoom) {
       const oldRoom = socket.currentRoom;
@@ -98,7 +86,7 @@ io.on('connection', (socket) => {
         activeUsers[socket.id].location = '未接続';
       }
       updateRoomCount(oldRoom);
-      sendDispatcherUpdate();
+      sendGlobalUserUpdate();
     }
   });
 
@@ -107,7 +95,7 @@ io.on('connection', (socket) => {
     if (socket.currentRoom) {
       updateRoomCount(socket.currentRoom);
     }
-    sendDispatcherUpdate();
+    sendGlobalUserUpdate();
   });
 });
 
@@ -117,9 +105,9 @@ function updateRoomCount(roomID) {
   io.to(roomID).emit('room-count-update', count);
 }
 
-// 司令用の一覧データを全クライアント（特に司令）に同期
-function sendDispatcherUpdate() {
-  io.emit('dispatcher-monitor-data', Object.values(activeUsers));
+// 🌐 運転士・信号・指令全員にリアルタイム配置リストを同期する関数
+function sendGlobalUserUpdate() {
+  io.emit('global-crew-monitor-data', Object.values(activeUsers));
 }
 
 server.listen(PORT, () => {

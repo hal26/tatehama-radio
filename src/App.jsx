@@ -38,7 +38,7 @@ const languages = {
     driverPanelTitle: "運転台無線チャンネル設定",
     driverInputHelp: "無線ch入力 (1～80) または直接周波数入力",
     signalPanelTitle: "信号所・検車区 VC選択",
-    dispPanelTitle: "無線通信・配置モニター盤"
+    dispPanelTitle: "無線通信・社員配置モニター盤"
   }
 };
 
@@ -62,6 +62,8 @@ function App() {
   const [connectedCount, setConnectedCount] = useState(0);
 
   const [signalPage, setSignalPage] = useState(1);
+  
+  // 👥 全員が見れるリアルタイム配置データ
   const [monitorData, setMonitorData] = useState([]);
 
   // ⚙️設定・デバイス管理
@@ -74,36 +76,29 @@ function App() {
   const [selectedOutput, setSelectedOutput] = useState('');
 
   // 📝 指令通告（メッセージ）機能用ステート
-  const [dispatchTarget, setDispatchTarget] = useState(''); // 送信先（運転台番号や乗務員名）
-  const [dispatchMessage, setDispatchMessage] = useState(''); // 送信内容（着発変更など）
-  const [receivedNotice, setReceivedNotice] = useState(null); // 受信した通告内容
-  const audioIntervalRef = useRef(null); // 警告音ループ用のタイマー
+  const [dispatchTarget, setDispatchTarget] = useState('');
+  const [dispatchMessage, setDispatchMessage] = useState('');
+  const [receivedNotice, setReceivedNotice] = useState(null);
+  const audioIntervalRef = useRef(null);
 
-  // 🔊 運転士用：指令警告音（ピピピピ！）を再生する関数
+  // 🔊 運転士用：指令警告音（ピピピピ！）
   const startEmergencyBeep = () => {
     if (audioIntervalRef.current) return;
-    
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
     audioIntervalRef.current = setInterval(() => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      
-      osc.type = 'square'; // 鉄道機器らしい固い矩形波
-      osc.frequency.setValueAtTime(1200, audioCtx.currentTime); // 1200Hzの高音
-      
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
       gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-      
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-      
       osc.start();
       osc.stop(audioCtx.currentTime + 0.15);
-    }, 300); // 0.3秒間隔でピピピピと鳴らす
+    }, 300);
   };
 
-  // 🔇 警告音を止める関数
   const stopEmergencyBeep = () => {
     if (audioIntervalRef.current) {
       clearInterval(audioIntervalRef.current);
@@ -111,7 +106,7 @@ function App() {
     }
   };
 
-  // 🎤 オーディオデバイス一覧を自動取得
+  // 🎤 デバイス一覧の自動取得
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then(() => {
@@ -129,7 +124,9 @@ function App() {
 
   useEffect(() => {
     socket.on('room-count-update', (count) => setConnectedCount(count));
-    socket.on('dispatcher-monitor-data', (data) => setMonitorData(data));
+    
+    // 全員へ送信される配置モニターデータを受け取る
+    socket.on('global-crew-monitor-data', (data) => setMonitorData(data));
 
     socket.on('join-failed', (msg) => {
       alert(`⚠️ 接続エラー: ${msg}`);
@@ -142,25 +139,24 @@ function App() {
       setIsConnected(true);
     });
 
-    // 📩 運転士・信号係共通：指令からの通告メッセージを受信した時
+    // 指令通告の受信
     socket.on('receive-dispatcher-notice', (data) => {
-      // 宛先が「全員」宛か、「自分の乗務員名」と一致する場合に作動
       if (data.target === '全員' || data.target === userName || userName.includes(data.target)) {
         setReceivedNotice(data);
-        startEmergencyBeep(); // 警告音を鳴らす
+        startEmergencyBeep();
       }
     });
 
     return () => {
       socket.off('room-count-update');
-      socket.off('dispatcher-monitor-data');
+      socket.off('global-crew-monitor-data');
       socket.off('join-failed');
       socket.off('join-success');
       socket.off('receive-dispatcher-notice');
     };
   }, [userName]);
 
-  // PTTキーボード連動
+  // PTTキーボード
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (isListeningKey) {
@@ -209,6 +205,7 @@ function App() {
     setIsLoggedIn(false);
   };
 
+  // 運転士・指令：ch・周波数接続処理
   const handleDriverConnect = () => {
     let targetFreq = inputFreq.trim();
     let label = "";
@@ -223,6 +220,14 @@ function App() {
     }
 
     socket.emit('join-frequency', { frequency: targetFreq, displayLabel: label });
+  };
+
+  // 📞 指令専用：ボタン一発で「指令専用本線VC」に接続する処理
+  const handleDispatcherDedicatedConnect = () => {
+    socket.emit('join-frequency', { 
+      frequency: '111.000', 
+      displayLabel: '指令専用無線 (111.000 MHz)' 
+    });
   };
 
   const handleSignalConnect = (stationName) => {
@@ -240,27 +245,30 @@ function App() {
     setCurrentRawFreq('');
   };
 
-  // 📞 指令専用：通告メッセージを送信する処理
+  // 指令通告一斉送信
   const handleSendNotice = () => {
     if (!dispatchTarget.trim() || !dispatchMessage.trim()) {
-      alert("運転台番号（送信先）と指令内容を入力してください。");
+      alert("対象と指令内容を入力してください。");
       return;
     }
-    // サーバー経由で全社員へブロードキャスト（受信側でフィルタリング）
     socket.emit('send-dispatcher-notice', {
       target: dispatchTarget.trim(),
       message: dispatchMessage.trim(),
       sender: userName
     });
-    alert(`➔ 運転台 [${dispatchTarget}] 宛に通告を送信しました。`);
-    setDispatchMessage(''); // 送信したら内容はクリア
+    alert(`➔ [${dispatchTarget}] 宛に通告を送信しました。`);
+    setDispatchMessage('');
   };
 
-  // 🖲️ 運転士専用：通告の「了解（確認）」ボタンを押した時の処理
   const handleConfirmNotice = () => {
-    stopEmergencyBeep(); // 音を止める
-    setReceivedNotice(null); // アラート画面を消す
-    // 必要に応じてサーバーに了解ログを送ることも可能
+    stopEmergencyBeep();
+    setReceivedNotice(null);
+  };
+
+  const getRoleText = (r) => {
+    if (r === 'driver') return t.driver;
+    if (r === 'signal') return t.signal;
+    return t.dispatcher;
   };
 
   if (!isLoggedIn) {
@@ -294,7 +302,7 @@ function App() {
         </div>
       </header>
 
-      {/* ⚠️ 運転士用：指令通告受信の強制割り込みポップアップ */}
+      {/* 緊急通告アラート */}
       {receivedNotice && (
         <div className="emergency-notice-overlay">
           <div className="emergency-notice-box">
@@ -303,9 +311,7 @@ function App() {
               <p className="notice-meta">発信元: {receivedNotice.sender} 運転指令員</p>
               <div className="notice-text-content">{receivedNotice.message}</div>
             </div>
-            <button className="btn-notice-confirm" onClick={handleConfirmNotice}>
-              了解 (通告を確認しました)
-            </button>
+            <button className="btn-notice-confirm" onClick={handleConfirmNotice}>了解 (通告を確認しました)</button>
           </div>
         </div>
       )}
@@ -345,7 +351,7 @@ function App() {
           <div className="radio-display-lcd">
             <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val" style={{color:'#00d2ff'}}>{selectedRole === 'driver' ? t.driver : selectedRole === 'signal' ? t.signal : t.dispatcher}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val" style={{color:'#00d2ff'}}>{getRoleText(selectedRole)}</span></div>
             <div className="lcd-line big-lcd-line"><span className="lcd-lbl">{t.freqLabel}</span><span className="lcd-val green-lcd-text">{currentDisplayLabel}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.signalLabel}</span><span className="lcd-val">{isTalking ? t.tx : isConnected ? t.rx : '---'}</span></div>
@@ -354,7 +360,7 @@ function App() {
           {isConnected && (
             <div className="in-call-controls">
               <div className="ctrl-buttons-row">
-                <button onClick={handleDisconnect} className="btn-cockpit danger" style={{gridColumn: 'span 2'}}>
+                <button onClick={handleDisconnect} className="btn-cockpit danger">
                   {t.btnDisconnect}
                 </button>
               </div>
@@ -368,7 +374,7 @@ function App() {
           )}
         </div>
 
-        {/* 右操作パネル側 */}
+        {/* 右操作パネル・モニター一覧側 */}
         <div className="cockpit-right-panel">
           {!isConnected ? (
             <div className="right-panel-scroll-box">
@@ -398,13 +404,48 @@ function App() {
                 </div>
               )}
 
+              {/* 📞 指令専用画面：指令無線接続 ＆ 通告テキスト送信卓 */}
               {selectedRole === 'dispatcher' && (
-                <div className="sub-panel-card">
-                  <h3>📞 指令無線 ch接続</h3>
-                  <p className="help-text">特定のch番号(1〜80)や周波数を入力して緊急介入できます。</p>
-                  <input type="text" className="freq-digit-input" value={inputFreq} onChange={(e) => setInputFreq(e.target.value)} placeholder="ch番号 または 周波数" />
-                  <button className="btn-action-primary" onClick={handleDriverConnect}>指定VCへ緊急介入</button>
-                </div>
+                <>
+                  <div className="sub-panel-card">
+                    <h3>📞 指令無線 統制接続</h3>
+                    <p className="help-text">指令員はボタン一発で「指令専用本線無線」を開くか、任意の運転chを指定して緊急介入できます。</p>
+                    <div style={{display:'flex', gap:'15px', marginBottom:'10px'}}>
+                      <button className="btn-action-primary" style={{background:'#27ae60', boxShadow:'0 4px 0 #1e7e43'}} onClick={handleDispatcherDedicatedConnect}>
+                        📻 指令専用無線ch (111.000MHz) へ接続
+                      </button>
+                    </div>
+                    <div style={{borderTop:'1px solid #30363d', paddingTop:'10px'}}>
+                      <input type="text" className="freq-digit-input" style={{fontSize:'20px', padding:'8px'}} value={inputFreq} onChange={(e) => setInputFreq(e.target.value)} placeholder="他chに割り込む場合はch番号を入力" />
+                      <button className="btn-action-primary" onClick={handleDriverConnect}>指定chへ緊急介入</button>
+                    </div>
+                  </div>
+
+                  <div className="sub-panel-card" style={{marginTop: '10px'}}>
+                    <h3>📝 列車運行通告送信盤</h3>
+                    <p className="help-text">特定の運転台、または「全員」に向けて着発変更通告テキストを一斉送信します。</p>
+                    <div style={{marginBottom: '8px'}}>
+                      <input 
+                        type="text" 
+                        style={{width: '100%', padding: '10px', background: '#010409', color: '#fff', border: '1px solid #30363d', borderRadius: '4px'}} 
+                        value={dispatchTarget} 
+                        onChange={(e) => setDispatchTarget(e.target.value)} 
+                        placeholder="送信先 (例: 1021M、または 全員)"
+                      />
+                    </div>
+                    <div>
+                      <textarea 
+                        style={{width: '100%', height: '50px', padding: '10px', background: '#010409', color: '#fff', border: '1px solid #30363d', borderRadius: '4px', resize: 'none', fontFamily:'monospace'}} 
+                        value={dispatchMessage} 
+                        onChange={(e) => setDispatchMessage(e.target.value)} 
+                        placeholder="通告内容を入力..."
+                      />
+                    </div>
+                    <button className="btn-action-primary" style={{marginTop: '8px', padding: '10px', background: '#da5b0b', boxShadow: '0 4px 0 #9e3f03'}} onClick={handleSendNotice}>
+                      ⚡ 通告呼出・一斉送信 ⚡
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           ) : (
@@ -414,68 +455,32 @@ function App() {
             </div>
           )}
 
-          {/* 📞 運転指令員専用：列車運行通告送信パネル ＆ モニター盤 */}
-          {selectedRole === 'dispatcher' && (
-            <>
-              <div className="sub-panel-card" style={{marginTop: '10px', height: 'auto', justifyContent: 'flex-start'}}>
-                <h3>📝 運転台個別指令・通告送信盤</h3>
-                <p className="help-text">特定の運転士、または「全員」に向けて着発変更等の臨時通告テキストを送信します。</p>
-                <div style={{display: 'flex', gap: '15px', marginBottom: '10px'}}>
-                  <div style={{flex: '1'}}>
-                    <label style={{fontSize: '13px', color: '#8b949e', display: 'block', marginBottom: '5px'}}>対象（運転台番号または乗務員名、または「全員」）</label>
-                    <input 
-                      type="text" 
-                      style={{width: '100%', padding: '10px', background: '#010409', color: '#fff', border: '1px solid #30363d', borderRadius: '4px', fontSize: '16px'}} 
-                      value={dispatchTarget} 
-                      onChange={(e) => setDispatchTarget(e.target.value)} 
-                      placeholder="例: 1021M、または 全員"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label style={{fontSize: '13px', color: '#8b949e', display: 'block', marginBottom: '5px'}}>指令・通告内容</label>
-                  <textarea 
-                    style={{width: '100%', height: '70px', padding: '10px', background: '#010409', color: '#fff', border: '1px solid #30363d', borderRadius: '4px', fontSize: '16px', fontFamily: 'monospace', resize: 'none'}} 
-                    value={dispatchMessage} 
-                    onChange={(e) => setDispatchMessage(e.target.value)} 
-                    placeholder="例: 館浜駅2番線着発に変更、到着後指令に連絡されたし。"
-                  />
-                </div>
-                <button 
-                  className="btn-action-primary" 
-                  style={{marginTop: '10px', padding: '12px', fontSize: '16px', background: '#da5b0b', boxShadow: '0 4px 0 #9e3f03'}} 
-                  onClick={handleSendNotice}
-                >
-                  ⚡ 通告呼出・一斉送信 ⚡
-                </button>
-              </div>
+          {/* 🖥️ 全社員共通モニター盤（運転士・信号係・指令員全員の画面の最下部に表示） */}
+          <div className="dispatcher-monitor-board">
+            <h3>🖥️ {t.dispPanelTitle}</h3>
+            <div className="monitor-table-container">
+              <table className="monitor-table">
+                <thead>
+                  <tr>
+                    <th>乗務員名</th>
+                    <th>担当職種</th>
+                    <th>現在位置 (接続中の周波数・駅VC)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monitorData.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.name}</td>
+                      <td><span className={`badge role-${user.role}`}>{getRoleText(user.role)}</span></td>
+                      <td className="loc-text">{user.location}</td>
+                    </tr>
+                  ))}
+                  {monitorData.length === 0 && <tr><td colSpan="3" style={{textAlign:'center', color:'#666'}}>乗務中の社員はいません</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-              <div className="dispatcher-monitor-board">
-                <h3>🖥️ {t.dispPanelTitle}</h3>
-                <div className="monitor-table-container">
-                  <table className="monitor-table">
-                    <thead>
-                      <tr>
-                        <th>乗務員名</th>
-                        <th>職種</th>
-                        <th>現在位置 (接続VC)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {monitorData.map((user) => (
-                        <tr key={user.id}>
-                          <td>{user.name}</td>
-                          <td><span className={`badge role-${user.role}`}>{user.role === 'driver' ? t.driver : user.role === 'signal' ? t.signal : t.dispatcher}</span></td>
-                          <td className="loc-text">{user.location}</td>
-                        </tr>
-                      ))}
-                      {monitorData.length === 0 && <tr><td colSpan="3" style={{textAlign:'center', color:'#666'}}>乗務中の社員はいません</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>
