@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
-// ⚠️ ご指定のRender URLを固定で埋め込み済みです
 const socket = io('https://tatehama-radio.onrender.com');
 
 const languages = {
@@ -30,6 +29,8 @@ const languages = {
     themeDark: "黒ベース (Dark)",
     themeLight: "白ベース (Light)",
     keybindLabel: "PTTキー設定",
+    audioInputLabel: "マイク入力デバイス (🎤)",
+    audioOutputLabel: "スピーカー出力デバイス (🔊)",
     adminPanelTitle: "⚠️ 指令員専用 遠隔統制コンソール",
     kickBtn: "当該ch全員強制切断",
     muteBtn: "当該ch全員強制消音",
@@ -71,7 +72,9 @@ const languages = {
     themeDark: "Dark",
     themeLight: "Light",
     keybindLabel: "PTT Keybind",
-    adminPanelTitle: "⚠️ Dispatcher Remote Control Console",
+    audioInputLabel: "Microphone Input (🎤)",
+    audioOutputLabel: "Speaker Output (🔊)",
+    adminPanelTitle: "⚠️ Admin Control Console",
     kickBtn: "FORCE KICK CH",
     muteBtn: "FORCE MUTE CH",
     blockBtn: "BLOCK CH USERS",
@@ -111,9 +114,31 @@ function App() {
   const [signalPage, setSignalPage] = useState(1);
   const [monitorData, setMonitorData] = useState([]);
 
+  // ⚙️設定・デバイス管理
   const [showSettings, setShowSettings] = useState(false);
   const [pttKey, setPttKey] = useState('Space');
   const [isListeningKey, setIsListeningKey] = useState(false);
+  
+  const [audioInputs, setAudioInputs] = useState([]);
+  const [audioOutputs, setAudioOutputs] = useState([]);
+  const [selectedInput, setSelectedInput] = useState('');
+  const [selectedOutput, setSelectedOutput] = useState('');
+
+  // 🎤 PCのオーディオデバイス（マイク・スピーカー）の一覧を自動取得
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(() => {
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+          const inputs = devices.filter(d => d.kind === 'audioinput');
+          const outputs = devices.filter(d => d.kind === 'audiooutput');
+          setAudioInputs(inputs);
+          setAudioOutputs(outputs);
+          if (inputs.length > 0) setSelectedInput(inputs[0].deviceId);
+          if (outputs.length > 0) setSelectedOutput(outputs[0].deviceId);
+        });
+      })
+      .catch(err => console.error("デバイス取得失敗:", err));
+  }, []);
 
   useEffect(() => {
     socket.on('room-count-update', (count) => setConnectedCount(count));
@@ -276,21 +301,34 @@ function App() {
         <div className="settings-overlay">
           <div className="settings-box">
             <h3>⚙️ {t.settings}</h3>
-            <hr />
-            <label>{t.langSelect}</label>
-            <select value={lang} onChange={(e) => setLang(e.target.value)} className="lang-select">
-              <option value="ja">日本語 (Japanese)</option>
-              <option value="en">English</option>
-            </select>
-            <label>{t.themeSelect}</label>
-            <select value={theme} onChange={(e) => setTheme(e.target.value)} className="lang-select">
-              <option value="dark">{t.themeDark}</option>
-              <option value="light">{t.themeLight}</option>
-            </select>
-            <label>{t.keybindLabel}</label>
-            <button className={`btn-keybind-capture ${isListeningKey ? 'capturing' : ''}`} onClick={() => setIsListeningKey(true)}>
-              {isListeningKey ? "Press any key..." : pttKey}
-            </button>
+            <div className="settings-scroll-area">
+              <label>{t.langSelect}</label>
+              <select value={lang} onChange={(e) => setLang(e.target.value)} className="lang-select">
+                <option value="ja">日本語 (Japanese)</option>
+                <option value="en">English</option>
+              </select>
+              <label>{t.themeSelect}</label>
+              <select value={theme} onChange={(e) => setTheme(e.target.value)} className="lang-select">
+                <option value="dark">{t.themeDark}</option>
+                <option value="light">{t.themeLight}</option>
+              </select>
+              <label>{t.keybindLabel}</label>
+              <button className={`btn-keybind-capture ${isListeningKey ? 'capturing' : ''}`} onClick={() => setIsListeningKey(true)}>
+                {isListeningKey ? "Press any key..." : pttKey}
+              </button>
+
+              {/* 🎤 オーディオ入力デバイス選択 */}
+              <label>{t.audioInputLabel}</label>
+              <select value={selectedInput} onChange={(e) => setSelectedInput(e.target.value)} className="lang-select">
+                {audioInputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0,5)}`}</option>)}
+              </select>
+
+              {/* 🔊 オーディオ出力デバイス選択 */}
+              <label>{t.audioOutputLabel}</label>
+              <select value={selectedOutput} onChange={(e) => setSelectedOutput(e.target.value)} className="lang-select">
+                {audioOutputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Speaker ${d.deviceId.slice(0,5)}`}</option>)}
+              </select>
+            </div>
             <hr />
             <button className="btn-close" onClick={() => { setShowSettings(false); setIsListeningKey(false); }}>X</button>
           </div>
@@ -298,6 +336,7 @@ function App() {
       )}
 
       <div className="main-cockpit-grid">
+        {/* 左モニター側 */}
         <div className="cockpit-left-monitor">
           <div className="radio-display-lcd">
             <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
@@ -324,9 +363,10 @@ function App() {
           )}
         </div>
 
+        {/* 右操作パネル側 */}
         <div className="cockpit-right-panel">
           {!isConnected ? (
-            <>
+            <div className="right-panel-scroll-box">
               {selectedRole === 'driver' && (
                 <div className="sub-panel-card">
                   <h3>🚊 {t.driverPanelTitle}</h3>
@@ -361,7 +401,7 @@ function App() {
                   <button className="btn-action-primary" onClick={handleDriverConnect}>指定VCへ緊急介入</button>
                 </div>
               )}
-            </>
+            </div>
           ) : (
             <div className="sub-panel-card active-call-status">
               <p>🔊 現在、通信回線が開通しています。</p>
