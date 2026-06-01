@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 
+// ⚠️ ご指定のRender URLを固定
 const socket = io('https://tatehama-radio.onrender.com');
 
 const languages = {
@@ -21,7 +22,7 @@ const languages = {
     pttReady: "● PTT長押しで送話",
     pttActive: "✦ 送話中 (PTT ON) ✦",
     settings: "設定",
-    home: "🏠 ホームに戻る",
+    home: "🏠 ログアウト・ホーム",
     langSelect: "言語選択 (Language)",
     themeSelect: "画面テーマ (Theme)",
     themeDark: "黒ベース (Dark)",
@@ -29,8 +30,9 @@ const languages = {
     keybindLabel: "PTTキー設定",
     audioInputLabel: "マイク入力デバイス (🎤)",
     audioOutputLabel: "スピーカー出力デバイス (🔊)",
-    loginTitle: "乗務員登録 ＆ 職種選択",
+    loginTitle: "乗務員登録 ＆ 職種認証ログイン",
     namePlaceholder: "乗務員名を入力してください",
+    codePlaceholder: "特務認証コード入力 (8桁)",
     driver: "運転士",
     signal: "信号係",
     dispatcher: "運転指令員",
@@ -50,10 +52,14 @@ function App() {
   const [theme, setTheme] = useState('dark');
   const t = languages[lang];
 
+  // ログイン・認証管理
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState(() => localStorage.getItem('tatehama_crew_name') || '');
-  const [selectedRole, setSelectedRole] = useState('driver');
+  const [selectedRole, setSelectedRole] = useState('driver'); // driver, signal, dispatcher
+  const [authCode, setAuthCode] = useState(''); // 入力された8桁コード
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false); // アドミンコード成功で全職種解放フラグ
 
+  // 無線機内部データ
   const [inputFreq, setInputFreq] = useState('1');
   const [currentDisplayLabel, setCurrentDisplayLabel] = useState('---');
   const [currentRawFreq, setCurrentRawFreq] = useState('');
@@ -62,11 +68,9 @@ function App() {
   const [connectedCount, setConnectedCount] = useState(0);
 
   const [signalPage, setSignalPage] = useState(1);
-  
-  // 👥 全員が見れるリアルタイム配置データ
   const [monitorData, setMonitorData] = useState([]);
 
-  // ⚙️設定・デバイス管理
+  // 設定・デバイス
   const [showSettings, setShowSettings] = useState(false);
   const [pttKey, setPttKey] = useState('Space');
   const [isListeningKey, setIsListeningKey] = useState(false);
@@ -75,13 +79,13 @@ function App() {
   const [selectedInput, setSelectedInput] = useState('');
   const [selectedOutput, setSelectedOutput] = useState('');
 
-  // 📝 指令通告（メッセージ）機能用ステート
+  // 指令通告メッセージ
   const [dispatchTarget, setDispatchTarget] = useState('');
   const [dispatchMessage, setDispatchMessage] = useState('');
   const [receivedNotice, setReceivedNotice] = useState(null);
   const audioIntervalRef = useRef(null);
 
-  // 🔊 運転士用：指令警告音（ピピピピ！）
+  // 警告音
   const startEmergencyBeep = () => {
     if (audioIntervalRef.current) return;
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -106,7 +110,7 @@ function App() {
     }
   };
 
-  // 🎤 デバイス一覧の自動取得
+  // デバイス取得
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then(() => {
@@ -124,8 +128,6 @@ function App() {
 
   useEffect(() => {
     socket.on('room-count-update', (count) => setConnectedCount(count));
-    
-    // 全員へ送信される配置モニターデータを受け取る
     socket.on('global-crew-monitor-data', (data) => setMonitorData(data));
 
     socket.on('join-failed', (msg) => {
@@ -139,7 +141,6 @@ function App() {
       setIsConnected(true);
     });
 
-    // 指令通告の受信
     socket.on('receive-dispatcher-notice', (data) => {
       if (data.target === '全員' || data.target === userName || userName.includes(data.target)) {
         setReceivedNotice(data);
@@ -188,14 +189,52 @@ function App() {
     };
   }, [isLoggedIn, isConnected, pttKey, isListeningKey, showSettings]);
 
+  // 🔑 暗証番号コード入力判定付きログイン処理
   const handleLoginSubmit = () => {
     if (!userName.trim()) {
       alert("乗務員名を入力してください。");
       return;
     }
+
+    const trimmedCode = authCode.trim();
+
+    // 1. アドミンメニュー解放コード判定
+    if (trimmedCode === '88888888') {
+      setIsAdminUnlocked(true);
+      alert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
+      setAuthCode(''); // 入力欄をクリア
+      return; // ログインはせず、メニュー選択状態へ
+    }
+
+    // 2. アドミン解放モードですでにボタンを選んでいる場合は、選択中のロールでそのままログイン
+    if (isAdminUnlocked) {
+      localStorage.setItem('tatehama_crew_name', userName);
+      setIsLoggedIn(true);
+      socket.emit('user-login', { name: userName, role: selectedRole });
+      return;
+    }
+
+    // 3. 通常コードによる直接裏ルートログイン判定
+    let finalRole = 'driver'; // デフォルトは運転士
+
+    if (trimmedCode === '22223333') {
+      finalRole = 'signal';
+      alert("🚨 信号係として認証されました。");
+    } else if (trimmedCode === '44445555') {
+      finalRole = 'dispatcher';
+      alert("📞 運転指令員として認証されました。");
+    } else if (trimmedCode !== '') {
+      alert("❌ 認証コードが正しくありません。");
+      return;
+    } else {
+      // コードが空欄の場合は通常通り「運転士」としてログイン
+      finalRole = 'driver';
+    }
+
     localStorage.setItem('tatehama_crew_name', userName);
+    setSelectedRole(finalRole);
     setIsLoggedIn(true);
-    socket.emit('user-login', { name: userName, role: selectedRole });
+    socket.emit('user-login', { name: userName, role: finalRole });
   };
 
   const handleGoHome = () => {
@@ -203,13 +242,14 @@ function App() {
     stopEmergencyBeep();
     setReceivedNotice(null);
     setIsLoggedIn(false);
+    setIsAdminUnlocked(false); // ホームに戻ったらアドミン解放状態もリセット
+    setAuthCode('');
+    setSelectedRole('driver');
   };
 
-  // 運転士・指令：ch・周波数接続処理
   const handleDriverConnect = () => {
     let targetFreq = inputFreq.trim();
     let label = "";
-
     const chNum = parseInt(targetFreq, 10);
     if (!isNaN(chNum) && chNum >= 1 && chNum <= 80) {
       const calcOffset = 100 + chNum;
@@ -218,16 +258,11 @@ function App() {
     } else {
       label = `無線周波数 (${targetFreq} MHz)`;
     }
-
     socket.emit('join-frequency', { frequency: targetFreq, displayLabel: label });
   };
 
-  // 📞 指令専用：ボタン一発で「指令専用本線VC」に接続する処理
   const handleDispatcherDedicatedConnect = () => {
-    socket.emit('join-frequency', { 
-      frequency: '111.000', 
-      displayLabel: '指令専用無線 (111.000 MHz)' 
-    });
+    socket.emit('join-frequency', { frequency: '111.000', displayLabel: '指令専用無線 (111.000 MHz)' });
   };
 
   const handleSignalConnect = (stationName) => {
@@ -245,7 +280,6 @@ function App() {
     setCurrentRawFreq('');
   };
 
-  // 指令通告一斉送信
   const handleSendNotice = () => {
     if (!dispatchTarget.trim() || !dispatchMessage.trim()) {
       alert("対象と指令内容を入力してください。");
@@ -271,10 +305,13 @@ function App() {
     return t.dispatcher;
   };
 
+  // 🛑 ログイン画面（認証コード対応）
   if (!isLoggedIn) {
     return (
       <div className={`app-container theme-${theme} login-screen-wrapper`}>
         <h2>{t.loginTitle}</h2>
+        
+        {/* 乗務員名入力 */}
         <input 
           type="text" 
           className="crew-name-input" 
@@ -282,16 +319,54 @@ function App() {
           onChange={(e) => setUserName(e.target.value)} 
           placeholder={t.namePlaceholder}
         />
-        <div className="role-grid">
-          <button className={`role-select-card ${selectedRole === 'driver' ? 'active' : ''}`} onClick={() => setSelectedRole('driver')}>🚊<br/>{t.driver}</button>
-          <button className={`role-select-card ${selectedRole === 'signal' ? 'active' : ''}`} onClick={() => setSelectedRole('signal')}>🚨<br/>{t.signal}</button>
-          <button className={`role-select-card ${selectedRole === 'dispatcher' ? 'active' : ''}`} onClick={() => setSelectedRole('dispatcher')}>📞<br/>{t.dispatcher}</button>
+
+        {/* メイン選択エリア */}
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', width: '100%', alignItems: 'center'}}>
+          
+          {/* 左側：職種ボタンエリア */}
+          <div className="role-grid" style={{gridTemplateColumns: isAdminUnlocked ? '1fr' : '1fr', gap: '15px'}}>
+            {!isAdminUnlocked ? (
+              // 🚊 通常時は「運転士」ボタンだけを表示
+              <button className="role-select-card active" style={{height: '110px', fontSize: '20px'}}>
+                🚊<br/>{t.driver} (常時選択可能)
+              </button>
+            ) : (
+              // 🔓 アドミン解除時は「全職種が選べるメニュー」が出現！
+              <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                <div style={{color: '#56d364', fontSize: '14px', fontWeight: 'bold', textAlign: 'center', marginBottom: '5px'}}>🔓 ADMIN FULL ACCESS UNLOCKED</div>
+                <button className={`role-select-card ${selectedRole === 'driver' ? 'active' : ''}`} style={{height: '55px', fontSize: '15px'}} onClick={() => setSelectedRole('driver')}>🚊 {t.driver}</button>
+                <button className={`role-select-card ${selectedRole === 'signal' ? 'active' : ''}`} style={{height: '55px', fontSize: '15px'}} onClick={() => setSelectedRole('signal')}>🚨 {t.signal}</button>
+                <button className={`role-select-card ${selectedRole === 'dispatcher' ? 'active' : ''}`} style={{height: '55px', fontSize: '15px'}} onClick={() => setSelectedRole('dispatcher')}>📞 {t.dispatcher}</button>
+              </div>
+            )}
+          </div>
+
+          {/* 右側：暗証番号入力エリア */}
+          <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
+            <label style={{fontSize: '14px', color: '#8b949e', fontWeight: 'bold'}}>🔒 信号・指令・アドミン用認証コード</label>
+            <input 
+              type="password" 
+              className="crew-name-input" 
+              style={{fontSize: '22px', padding: '15px', letterSpacing: '4px'}}
+              value={authCode} 
+              disabled={isAdminUnlocked} // アドミン解放後はロック
+              onChange={(e) => setAuthCode(e.target.value.replace(/[^0-9]/g, ''))} // 数字のみ
+              placeholder={isAdminUnlocked ? "認証完了" : t.codePlaceholder}
+              maxLength={8}
+            />
+            <span style={{fontSize: '11px', color: '#768390'}}>※運転士として乗務する場合は空欄のままで構いません。</span>
+          </div>
+
         </div>
-        <button className="btn-action-primary start-duty-btn" onClick={handleLoginSubmit}>{t.btnLogin}</button>
+
+        <button className="btn-action-primary start-duty-btn" onClick={handleLoginSubmit}>
+          {isAdminUnlocked ? "選択した職種で乗務開始" : t.btnLogin}
+        </button>
       </div>
     );
   }
 
+  // 無線機メイン画面（変更なし・全職種配置モニター完備）
   return (
     <div className={`app-container theme-${theme}`}>
       <header className="app-header">
@@ -346,7 +421,6 @@ function App() {
       )}
 
       <div className="main-cockpit-grid">
-        {/* 左モニター側 */}
         <div className="cockpit-left-monitor">
           <div className="radio-display-lcd">
             <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
@@ -374,7 +448,6 @@ function App() {
           )}
         </div>
 
-        {/* 右操作パネル・モニター一覧側 */}
         <div className="cockpit-right-panel">
           {!isConnected ? (
             <div className="right-panel-scroll-box">
@@ -404,7 +477,6 @@ function App() {
                 </div>
               )}
 
-              {/* 📞 指令専用画面：指令無線接続 ＆ 通告テキスト送信卓 */}
               {selectedRole === 'dispatcher' && (
                 <>
                   <div className="sub-panel-card">
@@ -455,7 +527,7 @@ function App() {
             </div>
           )}
 
-          {/* 🖥️ 全社員共通モニター盤（運転士・信号係・指令員全員の画面の最下部に表示） */}
+          {/* 🖥️ 全社員共通モニター盤 */}
           <div className="dispatcher-monitor-board">
             <h3>🖥️ {t.dispPanelTitle}</h3>
             <div className="monitor-table-container">
