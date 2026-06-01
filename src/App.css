@@ -1,29 +1,55 @@
-body {
-  margin: 0;
-  font-family: sans-serif;
-  background-color: #1a1a1a;
-  color: #e0e0e0;
-  user-select: none;
+/* --- テーマ共通スタイル --- */
+body { margin: 0; font-family: sans-serif; user-select: none; }
+
+.app-container { 
+  padding: 20px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; position: relative; 
+  transition: background-color 0.3s, color 0.3s;
 }
-.app-container { padding: 20px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; position: relative; }
-.app-header { display: flex; justify-content: space-between; align-items: center; }
+
+/* 黒ベース（従来通り） */
+.theme-dark { background-color: #1a1a1a; color: #e0e0e0; }
+.theme-dark .icon-btn { background: #333; color: #ccc; border: 1px solid #555; }
+.theme-dark .setup-panel input { background-color: #2c3e50; border: 1px solid #455a64; color: white; }
+
+/* 白ベース（完全反転） */
+.theme-light { background-color: #ffffff; color: #1a1a1a; }
+.theme-light .app-header h1 { color: #d35400; }
+.theme-light .icon-btn { background: #f0f0f0; color: #333; border: 1px solid #ccc; }
+.theme-light .setup-panel input { background-color: #f2f4f4; border: 2px solid #bdc3c7; color: #1a1a1a; font-weight: bold; }
+.theme-light .disp-label { color: #27ae60; }
+
+/* ヘッダー */
+.app-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; }
 .app-header h1 { font-size: 18px; margin: 0; color: #f39c12; }
-.icon-btn { background: #333; color: #ccc; font-size: 12px; padding: 5px 10px; border-radius: 4px; border: 1px solid #555; }
+.icon-btn { font-size: 12px; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+
+/* 🪐 職種ログイン画面の見た目 */
+.login-screen { justify-content: center; align-items: center; }
+.login-box { width: 100%; max-width: 320px; background: rgba(0,0,0,0.1); padding: 20px; border-radius: 8px; border: 1px solid #555; box-sizing: border-box; }
+.login-box h2 { font-size: 16px; text-align: center; margin-bottom: 20px; }
+.role-options { display: flex; flex-direction: column; gap: 10px; }
+.role-radio { display: flex; align-items: center; padding: 12px; background: #34495e; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; border: 2px solid transparent; }
+.theme-light .role-radio { background: #e5e8e8; color: #333; }
+.role-radio input { margin-right: 15px; transform: scale(1.3); }
+.role-radio.active { border-color: #f39c12; background: #2c3e50; color: #fff; }
+.theme-light .role-radio.active { background: #d5dbdb; border-color: #d35400; color: #000; }
 
 /* 設定画面のポップアップ */
 .settings-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 10; }
-.settings-box { background: #2c3e50; padding: 20px; border-radius: 8px; width: 80%; max-width: 300px; border: 2px solid #34495e; position: relative; }
+.settings-box { background: #2c3e50; padding: 20px; border-radius: 8px; width: 80%; max-width: 300px; border: 2px solid #34495e; position: relative; color: white; }
 .settings-box h3 { margin-top: 0; color: #f39c12; }
-.settings-box label { display: block; font-size: 12px; margin: 10px 0 5px; color: #bdc3c7; }
-.lang-select { width: 100%; padding: 8px; background: #1a252f; color: white; border: 1px solid #555; border-radius: 4px; }
-.admin-login-area input { width: 100%; padding: 8px; box-sizing: border-box; background: #1a252f; color: white; border: 1px solid #555; border-radius: 4px; margin-bottom: 5px; }
-.btn-admin-submit { width: 100%; background: #e67e22; color: white; padding: 6px; font-size: 12px; }
-.admin-status { color: #2ecc71; font-weight: bold; text-align: center; font-size: 14px; margin: 10px 0; }
+.settings-box label { display: block; font-size: 12px; margin: 15px 0 5px; color: #bdc3c7; }
+.lang-select { width: 100%; padding: 8px; background: #1a252f; color: white; border: 1px solid #555; border-radius: 4px; margin-bottom: 5px; }
 .btn-close { position: absolute; top: 10px; right: 10px; background: #c0392b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
 
-/* 無線ディスプレイ */
+/* キーバインド設定ボタン */
+.btn-keybind-capture { width: 100%; padding: 10px; background: #34495e; color: #fff; border: 1px dashed #f39c12; border-radius: 4px; font-weight: bold; cursor: pointer; text-align: center; }
+.btn-keybind-capture.capturing { background: #e67e22; animation: blink 1s infinite; }
+@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+/* 🟢 液晶風無線ディスプレイ */
 .radio-display { background-color: #0f2313; border: 3px solid #3a3a3a; border-radius: 6px; padding: 15px; margin: 15px 0; font-family: monospace; }
-.display-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.display-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px; }
 .main-freq { margin: 10px 0; border-top: 1px dashed #1f4025; border-bottom: 1px dashed #1f4025; padding: 8px 0; }
 .disp-label { color: #4a8556; }
 .disp-freq-val { font-size: 28px; color: #33ff66; font-weight: bold; }
@@ -42,7 +68,8 @@ body {
 /* 操作エリア */
 .setup-panel, .operation-panel { display: flex; flex-direction: column; flex-grow: 1; }
 .input-group { display: flex; flex-direction: column; margin-bottom: 15px; }
-.input-group input { background-color: #2c3e50; border: 1px solid #455a64; color: white; padding: 12px; font-size: 20px; text-align: center; border-radius: 4px; }
+.input-group label { font-size: 12px; margin-bottom: 5px; color: #7f8c8d; }
+.input-group input { padding: 12px; font-size: 22px; text-align: center; border-radius: 4px; font-family: monospace; }
 button { padding: 12px; font-size: 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; }
 .btn-connect { background-color: #2980b9; color: white; }
 .control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -50,5 +77,5 @@ button { padding: 12px; font-size: 16px; font-weight: bold; border-radius: 4px; 
 .btn-action.muted { background-color: #c0392b; }
 .btn-danger { background-color: #7f8c8d; color: white; }
 .ptt-area { margin-top: auto; margin-bottom: 10px; }
-.ptt-button { width: 100%; height: 80px; background-color: #d35400; color: white; font-size: 18px; border-radius: 8px; box-shadow: 0 5px 0 #a04000; }
+.ptt-button { width: 100%; height: 80px; background-color: #d35400; color: white; font-size: 16px; border-radius: 8px; box-shadow: 0 5px 0 #a04000; }
 .ptt-button:active, .ptt-button.active { background-color: #27ae60; box-shadow: 0 2px 0 #1e7e43; transform: translateY(3px); }
