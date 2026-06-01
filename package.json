@@ -5,6 +5,8 @@
   "main": "electron/main.js",
   "type": "commonjs",
   "scripts": {
+    "dev": "vite",
+    "start": "electron .",
     "build": "vite build",
     "server": "node server/index.js",
     "dist": "npm run build && electron-builder"
