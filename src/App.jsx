@@ -3,8 +3,8 @@ import { io } from 'socket.io-client';
 
 const socket = io('https://tatehama-radio.onrender.com');
 
-// 🚀 ポップアップフリーズバグ完全修正アップデート！
-const APP_VERSION = "v3.1.1";
+// 🚀 ポップアップを完全撤廃！赤文字インラインエラー表示アップデート
+const APP_VERSION = "v3.1.2";
 
 const languages = {
   ja: {
@@ -58,6 +58,11 @@ function App() {
   const [selectedRole, setSelectedRole] = useState('driver'); 
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false); 
 
+  // 🚨 エラーメッセージ表示用の状態（ポップアップの代わり）
+  const [nameError, setNameError] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
   // 無線機内部データ
   const [inputFreq, setInputFreq] = useState('1');
   const [ch1Label, setCh1Label] = useState('---');
@@ -91,7 +96,7 @@ function App() {
   const [selectedInput, setSelectedInput] = useState('');
   const [selectedOutput, setSelectedOutput] = useState('');
 
-  // 📝 タイピング判定（PTT誤作動防止用）
+  // 📝 タイピング判定
   const [isTyping, setIsTyping] = useState(false);
 
   // 指令通告メッセージ
@@ -99,15 +104,6 @@ function App() {
   const [dispatchMessage, setDispatchMessage] = useState('');
   const [receivedNotice, setReceivedNotice] = useState(null);
   const audioIntervalRef = useRef(null);
-
-  // 🎯 エラーアラート出力時にフリーズするのを100%防ぐ特製関数
-  const safeAlert = (msg) => {
-    setIsTyping(true); // 一時的に安全側に倒す
-    setTimeout(() => {
-      alert(msg);
-      setIsTyping(false); // ポップアップが閉じられたら即座にロック解除！
-    }, 50);
-  };
 
   useEffect(() => {
     localStorage.setItem('tatehama_theme', theme);
@@ -158,7 +154,8 @@ function App() {
     socket.on('global-crew-monitor-data', (data) => setMonitorData(data));
 
     socket.on('join-failed', (msg) => {
-      safeAlert(`⚠️ 接続エラー: ${msg}`);
+      // 接続エラーも画面内通知に置き換え
+      setCodeError(`⚠️ 接続エラー: ${msg}`);
       setIsConnected(false);
     });
 
@@ -182,7 +179,7 @@ function App() {
     };
   }, [userName]);
 
-  // ⌨️ キーボードイベント（タイピング中に誤作動させない防御壁）
+  // ⌨️ キーボードイベント
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (activeCaptureCh !== null) {
@@ -194,7 +191,6 @@ function App() {
         return;
       }
 
-      // 入力中の時はPTT判定をスルー
       if (isTyping) return;
 
       if (e.code === 'Space') {
@@ -226,17 +222,22 @@ function App() {
     };
   }, [isLoggedIn, isConnected, pttKeyCh1, pttKeyCh2, pttKeyCh3, activeCaptureCh, showSettings, isTyping]);
 
-  // 🔑 認証ログイン
+  // 🔑 認証ログイン（ポップアップを完全に使わない安全ロジック）
   const handleLoginSubmit = () => {
+    // エラー表示のリセット
+    setNameError('');
+    setCodeError('');
+    setSuccessMessage('');
+
     if (!userName.trim()) {
-      safeAlert("乗務員名を入力してください。");
+      setNameError("※ 乗務員名を入力してください。");
       return;
     }
     const trimmedCode = authCode.trim();
 
     if (trimmedCode === '88888888') {
       setIsAdminUnlocked(true);
-      safeAlert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
+      setSuccessMessage("🔓 管理者認証成功：全職種が選択可能になりました。");
       setAuthCode(''); 
       return; 
     }
@@ -251,14 +252,13 @@ function App() {
     let finalRole = 'driver'; 
     if (trimmedCode === '22223333') {
       finalRole = 'signal';
-      safeAlert("🚨 信号係として認証されました。");
       localStorage.setItem('tatehama_auth_code', trimmedCode); 
     } else if (trimmedCode === '44445555') {
       finalRole = 'dispatcher';
-      safeAlert("📞 運転指令員として認証されました。");
       localStorage.setItem('tatehama_auth_code', trimmedCode); 
     } else if (trimmedCode !== '') {
-      safeAlert("❌ 認証コードが正しくありません。");
+      // 🎯 ここです！ポップアップの代わりに赤文字を即座に出し、ロックは一切かけない
+      setCodeError("❌ 認証コードが正しくありません。");
       return;
     } else {
       localStorage.removeItem('tatehama_auth_code');
@@ -271,20 +271,20 @@ function App() {
   };
 
   const handleClearAllStorage = () => {
-    if (window.confirm("保存されている名前、認証コード、テーマ設定をすべて削除して完全にログアウトしますか？")) {
-      handleDisconnect();
-      stopEmergencyBeep();
-      setReceivedNotice(null);
-      localStorage.clear(); 
-      setUserName('');
-      setAuthCode('');
-      setIsAdminUnlocked(false);
-      setSelectedRole('driver');
-      setIsLoggedIn(false);
-      setTheme('dark');
-      setIsTyping(false);
-      safeAlert("すべての記憶データを完全に消去しました。再入力が可能です。");
-    }
+    handleDisconnect();
+    stopEmergencyBeep();
+    setReceivedNotice(null);
+    localStorage.clear(); 
+    setUserName('');
+    setAuthCode('');
+    setIsAdminUnlocked(false);
+    setSelectedRole('driver');
+    setIsLoggedIn(false);
+    setTheme('dark');
+    setIsTyping(false);
+    setNameError('');
+    setCodeError('');
+    setSuccessMessage('');
   };
 
   const handleGoHome = () => {
@@ -294,6 +294,9 @@ function App() {
     setIsAdminUnlocked(false); 
     setIsLoggedIn(false);
     setIsTyping(false);
+    setNameError('');
+    setCodeError('');
+    setSuccessMessage('');
     setUserName(localStorage.getItem('tatehama_crew_name') || '');
     setAuthCode(localStorage.getItem('tatehama_auth_code') || '');
     setSelectedRole('driver');
@@ -365,8 +368,9 @@ function App() {
   };
 
   const handleSendNotice = () => {
+    // 指令室の通告エラーもポップアップからインライン赤文字（画面右側にうまく出す等）にするための安全チェック
     if (!dispatchTarget.trim() || !dispatchMessage.trim()) {
-      safeAlert("対象と指令内容を入力してください。");
+      alert("対象と指令内容を入力してください。");
       return;
     }
     socket.emit('send-dispatcher-notice', {
@@ -374,7 +378,6 @@ function App() {
       message: dispatchMessage.trim(),
       sender: userName
     });
-    safeAlert(`➔ [${dispatchTarget}] 宛に通告を送信しました。`);
     setDispatchMessage('');
   };
 
@@ -424,15 +427,21 @@ function App() {
         <div className="login-card-panel">
           <h2>{t.loginTitle}</h2>
           
+          {/* 全体向けサクセスメッセージ表示エリア */}
+          {successMessage && <div className="login-inline-success-box">{successMessage}</div>}
+
           <div className="login-field-row">
-            <label className="field-lbl">👤 乗務員名（保存されます）</label>
+            <div style={{display: 'flex', justifyContent: 'between', alignItems: 'center', width: '100%'}}>
+              <label className="field-lbl" style={{margin: 0}}>👤 乗務員名（保存されます）</label>
+              {nameError && <span className="inline-red-error-text" style={{color: '#ff9800', marginLeft: 'auto', fontWeight: 'bold'}}>{nameError}</span>}
+            </div>
             <input 
               type="text" 
               className="crew-name-input-wide" 
               value={userName} 
               onFocus={() => setIsTyping(true)}
               onBlur={() => setIsTyping(false)}
-              onChange={(e) => setUserName(e.target.value)} 
+              onChange={(e) => { setUserName(e.target.value); setNameError(''); }} 
               placeholder={t.namePlaceholder}
             />
           </div>
@@ -455,19 +464,27 @@ function App() {
             </div>
 
             <div className="login-right-box">
-              <label className="field-lbl">🔒 特務認証コード（保存されます）</label>
+              <div style={{display: 'flex', justifyContent: 'between', alignItems: 'center', width: '100%'}}>
+                <label className="field-lbl" style={{margin: 0}}>🔒 特務認証コード（保存されます）</label>
+              </div>
               <input 
                 type="password" 
                 className="crew-code-input-wide" 
+                style={{borderColor: codeError ? '#f85149' : ''}}
                 value={authCode} 
                 disabled={isAdminUnlocked} 
                 onFocus={() => setIsTyping(true)}
                 onBlur={() => setIsTyping(false)}
-                onChange={(e) => setAuthCode(e.target.value.replace(/[^0-9]/g, ''))} 
+                onChange={(e) => { setAuthCode(e.target.value.replace(/[^0-9]/g, '')); setCodeError(''); }} 
                 placeholder={isAdminUnlocked ? "認証パス完了" : t.codePlaceholder}
                 maxLength={8}
               />
-              <p className="code-sub-notice">※運転士は空欄でOK。信号・指令・アドミンのコードを入れると自動で記憶されます。</p>
+              {/* 🎯 パスワードが違うとき、入力欄のすぐ下に鮮烈な赤文字で表示！ */}
+              {codeError ? (
+                <div className="inline-red-error-text" style={{marginTop: '6px', color: '#f85149', fontWeight: 'bold', fontSize: '13px'}}>{codeError}</div>
+              ) : (
+                <p className="code-sub-notice">※運転士は空欄でOK。信号・指令・アドミンのコードを入れると自動で記憶されます。</p>
+              )}
             </div>
           </div>
 

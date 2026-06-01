@@ -224,3 +224,21 @@ body {
 .btn-key-clear:hover {
   background: #c0392b !important;
 }
+
+/* 管理者認証成功などのインライン通知 */
+.login-inline-success-box {
+  background: rgba(57, 211, 83, 0.15);
+  border: 1px solid #238636;
+  color: #56d364;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 15px;
+  text-align: center;
+  font-weight: bold;
+}
+.theme-light .login-inline-success-box {
+  background: #dafbe1;
+  border-color: #2da44e;
+  color: #1a7f37;
+}
