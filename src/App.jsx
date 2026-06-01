@@ -3,8 +3,8 @@ import { io } from 'socket.io-client';
 
 const socket = io('https://tatehama-radio.onrender.com');
 
-// 🚀 指令統制強化・テンキー追加アップデート！
-const APP_VERSION = "v3.1.0";
+// 🚀 ポップアップフリーズバグ完全修正アップデート！
+const APP_VERSION = "v3.1.1";
 
 const languages = {
   ja: {
@@ -69,12 +69,12 @@ function App() {
   const [signalPage, setSignalPage] = useState(1);
   const [monitorData, setMonitorData] = useState([]);
 
-  // 🔊 3ch独立受話ミュート状態
+  // 🔊 3ch独立受話ミュート
   const [muteCh1, setMuteCh1] = useState(false);
   const [muteCh2, setMuteCh2] = useState(false);
   const [muteCh3, setMuteCh3] = useState(false);
 
-  // 🎤 3ch独立PTT送信状態
+  // 🎤 3ch独立PTT送信
   const [isTalkingCh1, setIsTalkingCh1] = useState(false);
   const [isTalkingCh2, setIsTalkingCh2] = useState(false);
   const [isTalkingCh3, setIsTalkingCh3] = useState(false);
@@ -91,7 +91,7 @@ function App() {
   const [selectedInput, setSelectedInput] = useState('');
   const [selectedOutput, setSelectedOutput] = useState('');
 
-  // 📝 指令入力中のキーボード誤作動防止フラグ（これの制御ミスが原因でした）
+  // 📝 タイピング判定（PTT誤作動防止用）
   const [isTyping, setIsTyping] = useState(false);
 
   // 指令通告メッセージ
@@ -99,6 +99,15 @@ function App() {
   const [dispatchMessage, setDispatchMessage] = useState('');
   const [receivedNotice, setReceivedNotice] = useState(null);
   const audioIntervalRef = useRef(null);
+
+  // 🎯 エラーアラート出力時にフリーズするのを100%防ぐ特製関数
+  const safeAlert = (msg) => {
+    setIsTyping(true); // 一時的に安全側に倒す
+    setTimeout(() => {
+      alert(msg);
+      setIsTyping(false); // ポップアップが閉じられたら即座にロック解除！
+    }, 50);
+  };
 
   useEffect(() => {
     localStorage.setItem('tatehama_theme', theme);
@@ -149,7 +158,7 @@ function App() {
     socket.on('global-crew-monitor-data', (data) => setMonitorData(data));
 
     socket.on('join-failed', (msg) => {
-      alert(`⚠️ 接続エラー: ${msg}`);
+      safeAlert(`⚠️ 接続エラー: ${msg}`);
       setIsConnected(false);
     });
 
@@ -173,7 +182,7 @@ function App() {
     };
   }, [userName]);
 
-  // ⌨️ キーボードイベント（文字入力中はPTTを完全に無視するように改良）
+  // ⌨️ キーボードイベント（タイピング中に誤作動させない防御壁）
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (activeCaptureCh !== null) {
@@ -185,10 +194,8 @@ function App() {
         return;
       }
 
-      // 何か文字や数字をタイピング入力している間はPTTキー判定を完全スルー！
-      if (isTyping) {
-        return;
-      }
+      // 入力中の時はPTT判定をスルー
+      if (isTyping) return;
 
       if (e.code === 'Space') {
         e.preventDefault(); 
@@ -222,14 +229,14 @@ function App() {
   // 🔑 認証ログイン
   const handleLoginSubmit = () => {
     if (!userName.trim()) {
-      alert("乗務員名を入力してください。");
+      safeAlert("乗務員名を入力してください。");
       return;
     }
     const trimmedCode = authCode.trim();
 
     if (trimmedCode === '88888888') {
       setIsAdminUnlocked(true);
-      alert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
+      safeAlert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
       setAuthCode(''); 
       return; 
     }
@@ -244,14 +251,14 @@ function App() {
     let finalRole = 'driver'; 
     if (trimmedCode === '22223333') {
       finalRole = 'signal';
-      alert("🚨 信号係として認証されました。");
+      safeAlert("🚨 信号係として認証されました。");
       localStorage.setItem('tatehama_auth_code', trimmedCode); 
     } else if (trimmedCode === '44445555') {
       finalRole = 'dispatcher';
-      alert("📞 運転指令員として認証されました。");
+      safeAlert("📞 運転指令員として認証されました。");
       localStorage.setItem('tatehama_auth_code', trimmedCode); 
     } else if (trimmedCode !== '') {
-      alert("❌ 認証コードが正しくありません。");
+      safeAlert("❌ 認証コードが正しくありません。");
       return;
     } else {
       localStorage.removeItem('tatehama_auth_code');
@@ -276,7 +283,7 @@ function App() {
       setIsLoggedIn(false);
       setTheme('dark');
       setIsTyping(false);
-      alert("すべての記憶データを完全に消去しました。再入力が可能です。");
+      safeAlert("すべての記憶データを完全に消去しました。再入力が可能です。");
     }
   };
 
@@ -359,7 +366,7 @@ function App() {
 
   const handleSendNotice = () => {
     if (!dispatchTarget.trim() || !dispatchMessage.trim()) {
-      alert("対象と指令内容を入力してください。");
+      safeAlert("対象と指令内容を入力してください。");
       return;
     }
     socket.emit('send-dispatcher-notice', {
@@ -367,16 +374,14 @@ function App() {
       message: dispatchMessage.trim(),
       sender: userName
     });
-    alert(`➔ [${dispatchTarget}] 宛に通告を送信しました。`);
+    safeAlert(`➔ [${dispatchTarget}] 宛に通告を送信しました。`);
     setDispatchMessage('');
   };
 
-  // 📱 スクリーンテンキーカチカチ処理用関数
   const handleKeypadPress = (num) => {
     if (num === '修正') {
       setInputFreq('');
     } else {
-      // チャンネル番号は最大3桁（1〜80等）を想定
       if (inputFreq.length < 4) {
         setInputFreq(inputFreq + num);
       }
@@ -394,7 +399,6 @@ function App() {
     return t.dispatcher;
   };
 
-  // 🛑 ログイン画面
   if (!isLoggedIn) {
     return (
       <div className={`app-container theme-${theme} login-screen-page-wrapper`}>
@@ -549,11 +553,10 @@ function App() {
       )}
 
       <div className="main-cockpit-grid">
-        {/* 左側：トリプル交信液晶盤 */}
         <div className="cockpit-left-monitor">
           <div className="radio-display-lcd" style={{gap: '8px', padding: '15px'}}>
-            <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val val-status ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className={`lcd-val highlights`}>{userName}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val role-name-color-lcd">{getRoleText(selectedRole)}</span></div>
             
             <div>
@@ -613,21 +616,16 @@ function App() {
           )}
         </div>
 
-        {/* 右操作卓（指令員はONLINE中も隠れないようにレイアウト分離！） */}
         <div className="cockpit-right-panel">
-          
-          {/* 🌟 1. 通常操作画面（未接続時の運転士・信号、または常時表示の指令員接続卓） */}
           {(!isConnected || selectedRole === 'dispatcher') && (
             <div className="right-panel-scroll-box" style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
               
-              {/* 【運転士】ch設定 ＋ スクリーンテンキー */}
               {selectedRole === 'driver' && (
                 <div className="sub-panel-card">
                   <h3>🚊 {t.driverPanelTitle}</h3>
                   <p className="help-text">{t.driverInputHelp}</p>
                   <input type="text" className="freq-digit-input" value={inputFreq} readOnly placeholder="ch番号入力" />
                   
-                  {/* 📱 運転士用スクリーンテンキーパネル */}
                   <div className="screen-num-keypad">
                     {[1,2,3,4,5,6,7,8,9,0,'修正'].map((n) => (
                       <button key={n} type="button" className={`btn-key-digit ${n === '修正' ? 'btn-key-clear' : ''}`} onClick={() => handleKeypadPress(n)}>{n}</button>
@@ -637,7 +635,6 @@ function App() {
                 </div>
               )}
 
-              {/* 【信号係】駅選択 */}
               {selectedRole === 'signal' && (
                 <div className="sub-panel-card">
                   <h3>🚨 {t.signalPanelTitle} (Page {signalPage}/2)</h3>
@@ -655,7 +652,6 @@ function App() {
                 </div>
               )}
 
-              {/* 📞 【運転指令員専用】接続 ＆ テンキー */}
               {selectedRole === 'dispatcher' && (
                 <div className="sub-panel-card">
                   <h3>📞 指令無線 統制接続卓</h3>
@@ -689,7 +685,6 @@ function App() {
             </div>
           )}
 
-          {/* 🌟 2. 運転士・信号係が無線接続中に表示されるステータスカード */}
           {isConnected && selectedRole !== 'dispatcher' && (
             <div className="sub-panel-card active-call-status">
               <p>🔊 現在、トリプルマルチ無線が同時開通しています。</p>
@@ -698,7 +693,6 @@ function App() {
             </div>
           )}
 
-          {/* 🌟 3. 【運転指令員専用】接続中だろうと何だろうと「常時出現」する列車通告盤 */}
           {selectedRole === 'dispatcher' && (
             <div className="sub-panel-card" style={{marginTop: '0px'}}>
               <h3>📝 列車運行通告送信盤（常時操作可能）</h3>
@@ -730,7 +724,6 @@ function App() {
             </div>
           )}
 
-          {/* 🖥️ 全社員共通モニター盤（指令員は接続中も常に見れます） */}
           <div className="dispatcher-monitor-board" style={{marginTop: '0px'}}>
             <h3>🖥️ {t.dispPanelTitle}</h3>
             <div className="monitor-table-container">
