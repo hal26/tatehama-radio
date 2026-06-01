@@ -242,3 +242,24 @@ body {
   border-color: #2da44e;
   color: #1a7f37;
 }
+
+/* 各回線の人数表示用バッジ */
+.lcd-channel-members-tag {
+  font-size: 12px;
+  font-family: monospace;
+  margin-left: auto;
+  font-weight: bold;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.theme-light .lcd-channel-members-tag {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* 満員時の点滅演出 */
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
