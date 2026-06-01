@@ -3,12 +3,12 @@ import { io } from 'socket.io-client';
 
 const socket = io('https://tatehama-radio.onrender.com');
 
-// 🚀 v3.1.6: 独立入線化（1chずつ個別接続）＆切断chのPTTボタンをダークグレー化！
-const APP_VERSION = "v3.1.6";
+// 🚀 v3.1.7: 中国語の誤混入を完全撤去！純国産の日本語仕様に修正
+const APP_VERSION = "v3.1.7";
 
 const languages = {
   ja: {
-    title: "馆浜电铁 运行管理无线系统",
+    title: "館浜電鉄 運行管理無線システム",
     statusLabel: "STATUS:",
     standby: "STANDBY (未接続)",
     online: "ONLINE (複数波独立リンク中)", 
@@ -31,7 +31,7 @@ const languages = {
     signal: "信号係",
     dispatcher: "運転指令員",
     btnLogin: "乗務開始",
-    driverPanelTitle: "🚊 運転台列車无线 チャンネル設定",
+    driverPanelTitle: "🚊 運転台列車無線 チャンネル設定",
     driverInputHelp: "テンキーでch番号を入力し、下のボタンで個別に開通させます（定員10名）",
     signalPanelTitle: "🚨 信号所VC 独立受令選択",
     dispPanelTitle: "無線通信・社員配置モニター盤",
@@ -59,7 +59,7 @@ function App() {
   const [codeError, setCodeError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // 各チャンネルの「独立した」開通フラグ・ラベル
+  // 各チャンネルの開通フラグ・ラベル
   const [isCh1Active, setIsCh1Active] = useState(false);
   const [isCh2Active, setIsCh2Active] = useState(false);
   const [isCh3Active, setIsCh3Active] = useState(false);
@@ -115,7 +115,7 @@ function App() {
   const [receivedNotice, setReceivedNotice] = useState(null);
   const audioIntervalRef = useRef(null);
 
-  // 全体接続ステート（いずれかのchがアクティブならtrue）
+  // 全体接続ステート
   const isConnected = isCh1Active || isCh2Active || isCh3Active;
 
   useEffect(() => {
@@ -298,7 +298,6 @@ function App() {
     setSelectedRole('driver');
   };
 
-  // 🎯 【新機能】無線① 独立接続 (本線)
   const connectChannel1 = () => {
     const chNum = parseInt(inputFreq.trim(), 10);
     if (isNaN(chNum) || chNum < 1 || chNum > 80) {
@@ -315,7 +314,6 @@ function App() {
     setCodeError('');
   };
 
-  // 🎯 【新機能】無線② 独立接続 (共通波)
   const connectChannel2 = () => {
     socket.emit('join-frequency', { frequency: '111.000', displayLabel: '全線列車共通受令波' });
     setCh2Label("111.000 MHz (列車共通波)");
@@ -323,9 +321,8 @@ function App() {
     setCodeError('');
   };
 
-  // 🎯 【新機能】無線③ 独立接続 (信号指令連絡波)
   const connectChannel3 = () => {
-    if (selectedRole === 'driver') return; // 運転士はアクセス不可
+    if (selectedRole === 'driver') return; 
     if (countCh3 >= limitCh3) {
       setCodeError(`❌ 無線③は満員（${limitCh3}名）です。`); return;
     }
@@ -335,7 +332,6 @@ function App() {
     setCodeError('');
   };
 
-  // 🚨 信号係の駅VCへの独立入線
   const handleSignalStationConnect = (stationName) => {
     if (countCh1 >= limitCh1) {
       setCodeError(`❌ ${stationName}駅VCは満員（${limitCh1}名）です。`); return;
@@ -347,7 +343,6 @@ function App() {
     setCodeError('');
   };
 
-  // 🔴 一斉全切断
   const handleDisconnectAll = () => {
     socket.emit('leave-frequency');
     setIsCh1Active(false); setIsCh2Active(false); setIsCh3Active(false);
@@ -356,13 +351,11 @@ function App() {
     setCountCh1(0); setCountCh2(0); setCountCh3(0);
   };
 
-  // 右クリック個別メニュー呼び出し
   const handleDisconnectRightClick = (e) => {
     e.preventDefault();
     setContextMenu({ show: true, x: e.clientX, y: e.clientY });
   };
 
-  // 個別チャンネル部分切断
   const handleDisconnectSpecificChannel = (chNum) => {
     if (chNum === 1) { setIsCh1Active(false); setCh1Label('---'); setCountCh1(0); setIsTalkingCh1(false); }
     if (chNum === 2) { setIsCh2Active(false); setCh2Label('---'); setCountCh2(0); setIsTalkingCh2(false); }
@@ -385,7 +378,6 @@ function App() {
   const getRoleText = (r) => { if (r === 'driver') return t.driver; if (r === 'signal') return t.signal; return t.dispatcher; };
 
   if (!isLoggedIn) {
-    // ログイン省略 (コード不変)
     return (
       <div className={`app-container theme-${theme} login-screen-page-wrapper`}>
         <div style={{position: 'absolute', top: '20px', right: '30px', zIndex: 10}}>
@@ -448,7 +440,7 @@ function App() {
           <div className="menu-header-title">独立回線切断選択 (右クリックメニュー)</div>
           {isCh1Active && <button type="button" className="menu-item-btn item-ch1" onClick={() => handleDisconnectSpecificChannel(1)}>無線① を切断</button>}
           {isCh2Active && <button type="button" className="menu-item-btn item-ch2" onClick={() => handleDisconnectSpecificChannel(2)}>無線② を切断</button>}
-          {isCh3Active && <button type="button" className="menu-item-btn item-ch3" onClick={() => handleDisconnectSpecificChannel(3)}>無線③ を切断</button>}
+          {isCh3Active && tyrannyRole !== 'driver' && <button type="button" className="menu-item-btn item-ch3" onClick={() => handleDisconnectSpecificChannel(3)}>無線③ を切断</button>}
         </div>
       )}
 
@@ -468,7 +460,7 @@ function App() {
             <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val role-name-color-lcd">{getRoleText(selectedRole)}</span></div>
             
-            {/* 無線① 表示領域 */}
+            {/* 無線① */}
             <div>
               <div className="lcd-line" style={{border: 'none'}}>
                 <span className="lcd-lbl">📡 無線① [MAIN]:</span>
@@ -482,7 +474,7 @@ function App() {
               </div>
             </div>
 
-            {/* 無線② 表示領域 */}
+            {/* 無線② */}
             <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px'}}>
               <div className="lcd-line" style={{border: 'none'}}>
                 <span className="lcd-lbl" style={{color: '#ff9800'}}>📻 無線② [共通通報波]:</span>
@@ -494,7 +486,7 @@ function App() {
               </div>
             </div>
 
-            {/* 無線③ 表示領域 */}
+            {/* 無線③ */}
             {selectedRole !== 'driver' ? (
               <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px'}}>
                 <div className="lcd-line" style={{border: 'none'}}>
@@ -519,7 +511,6 @@ function App() {
             </button>
             
             <div style={{display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px'}}>
-              {/* 🎯 カイセン：未開通時は disabled-lock クラスが適用され暗い灰色に固定化 */}
               <button 
                 className={`ptt-hardware-button ptt-hardware-ch1 ${isTalkingCh1 ? 'active' : ''} ${!isCh1Active ? 'disabled-lock' : ''}`} 
                 type="button" 
@@ -555,7 +546,7 @@ function App() {
         <div className="cockpit-right-panel">
           <div className="right-panel-scroll-box" style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
             
-            {/* 運転士：1個ずつ独立して接続ボタンを押せるように配置 */}
+            {/* 運転士 */}
             {selectedRole === 'driver' && (
               <div className="sub-panel-card">
                 <h3>{t.driverPanelTitle}</h3>
@@ -569,7 +560,6 @@ function App() {
                   ))}
                 </div>
 
-                {/* 🎯 カイセン：個別に接続するコマンド群 */}
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px'}}>
                   <button type="button" className="btn-action-primary" style={{background: isCh1Active ? '#2c3e50' : '#1f618d'}} onClick={connectChannel1}>
                     {isCh1Active ? "①本線 ch更新入線" : "①本線 ch開通"}
@@ -581,7 +571,7 @@ function App() {
               </div>
             )}
 
-            {/* 信号係：駅VCと各無線波へ個別に独立接続 */}
+            {/* 信号係 */}
             {selectedRole === 'signal' && (
               <div className="sub-panel-card">
                 <h3>{t.signalPanelTitle} (Page {signalPage}/2)</h3>
@@ -599,7 +589,7 @@ function App() {
               </div>
             )}
 
-            {/* 指令員：すべての回線に個別に割り込み・開通が可能 */}
+            {/* 💡 運転指令員：中国語を完全に排除した日本国内版 */}
             {selectedRole === 'dispatcher' && (
               <div className="sub-panel-card">
                 <h3>📞 指令独立回線割当盤</h3>
@@ -609,7 +599,7 @@ function App() {
                   <button type="button" className="btn-action-primary" style={{fontSize:'12px', background: isCh3Active ? '#2c3e50' : '#2980b9'}} onClick={connectChannel3}>③連絡波開通</button>
                 </div>
                 <div style={{marginTop:'10px'}}>
-                  <input type="text" className="freq-digit-input" value={inputFreq} readOnly style={{fontSize:'16px', padding:'4px'}} />
+                  <input type="text" className="freq-digit-input" value={inputFreq} readOnly style={{fontSize:'16px', padding:'4px'} /* image_e3a8db.png 基準 */} />
                   <div className="screen-num-keypad" style={{gridTemplateColumns:'repeat(6, 1fr)', gap:'4px', marginTop:'5px'}}>
                     {[1,2,3,4,5,6,7,8,9,0,'修正'].map(n => <button key={n} className="btn-key-digit" style={{padding:'4px 0', fontSize:'12px'}} onClick={() => handleKeypadPress(n)}>{n}</button>)}
                   </div>
@@ -617,7 +607,7 @@ function App() {
               </div>
             )}
 
-            {/* 指令通告・モニター省略 */}
+            {/* 指令通告 */}
             {selectedRole === 'dispatcher' && (
               <div className="sub-panel-card" style={{marginTop: '0px'}}>
                 <h3>📝 列車運行通告送信盤</h3>
@@ -627,6 +617,7 @@ function App() {
               </div>
             )}
 
+            {/* モニター */}
             <div className="dispatcher-monitor-board" style={{marginTop: '0px'}}>
               <h3>🖥️ {t.dispPanelTitle}</h3>
               <div className="monitor-table-container">
