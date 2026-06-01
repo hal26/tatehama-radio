@@ -1,26 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 
-// ⚠️ ご指定のRender URLを固定
+// ⚠️ Renderの通信サーバーURL
 const socket = io('https://tatehama-radio.onrender.com');
+
+// 🚀 バージョン管理定数
+const APP_VERSION = "v2.0.0";
 
 const languages = {
   ja: {
     title: "館浜電鉄 運行管理無線システム",
     statusLabel: "STATUS:",
     standby: "STANDBY (未接続)",
-    online: "ONLINE (接続中)",
-    freqLabel: "FREQ/LOC:",
+    online: "ONLINE (複数無線接続中)",
+    freqLabel: "MAIN CH/LOC:",
+    subFreqLabel: "SUB CH (受令):",
     membersLabel: "MEMBERS:",
     signalLabel: "SIGNAL:",
     roleLabel: "ROLE:",
     userLabel: "NAME:",
-    tx: "■ TX (送信中)",
-    rx: "□ RX (受信待機)",
-    btnConnect: "接続開始",
-    btnDisconnect: "回線切断",
-    pttReady: "● PTT長押しで送話",
-    pttActive: "✦ 送話中 (PTT ON) ✦",
+    tx: "■ TX (メイン送信中)",
+    rx: "□ RX (全線待機中)",
+    btnConnect: "複数無線 接続開始",
+    btnDisconnect: "全回線切断",
+    pttReady: "● PTT長押しでメイン送話",
+    pttActive: "✦ メイン送話中 (PTT ON) ✦",
     settings: "設定",
     home: "🏠 ログアウト・ホーム",
     langSelect: "言語選択 (Language)",
@@ -37,9 +41,9 @@ const languages = {
     signal: "信号係",
     dispatcher: "運転指令員",
     btnLogin: "乗務開始",
-    driverPanelTitle: "運転台無線チャンネル設定",
-    driverInputHelp: "無線ch入力 (1～80) または直接周波数入力",
-    signalPanelTitle: "信号所・検車区 VC選択",
+    driverPanelTitle: "運転台無線 ＆ 列車無線 同時設定",
+    driverInputHelp: "指定ch(1～80)に接続し、同時に【列車無線】も傍受します",
+    signalPanelTitle: "信号所VC ＆ 列車無線 同時選択",
     dispPanelTitle: "無線通信・社員配置モニター盤"
   }
 };
@@ -55,14 +59,14 @@ function App() {
   // ログイン・認証管理
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState(() => localStorage.getItem('tatehama_crew_name') || '');
-  const [selectedRole, setSelectedRole] = useState('driver'); // driver, signal, dispatcher
-  const [authCode, setAuthCode] = useState(''); // 入力された8桁コード
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false); // アドミンコード成功で全職種解放フラグ
+  const [selectedRole, setSelectedRole] = useState('driver'); 
+  const [authCode, setAuthCode] = useState(''); 
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false); 
 
-  // 無線機内部データ
+  // 無線機内部データ（複数ch対応）
   const [inputFreq, setInputFreq] = useState('1');
   const [currentDisplayLabel, setCurrentDisplayLabel] = useState('---');
-  const [currentRawFreq, setCurrentRawFreq] = useState('');
+  const [subDisplayLabel, setSubDisplayLabel] = useState('---'); 
   const [isConnected, setIsConnected] = useState(false);
   const [isTalking, setIsTalking] = useState(false);
   const [connectedCount, setConnectedCount] = useState(0);
@@ -136,8 +140,6 @@ function App() {
     });
 
     socket.on('join-success', ({ frequency, displayLabel }) => {
-      setCurrentRawFreq(frequency);
-      setCurrentDisplayLabel(displayLabel);
       setIsConnected(true);
     });
 
@@ -189,24 +191,21 @@ function App() {
     };
   }, [isLoggedIn, isConnected, pttKey, isListeningKey, showSettings]);
 
-  // 🔑 暗証番号コード入力判定付きログイン処理
+  // 🔑 暗証番号認証
   const handleLoginSubmit = () => {
     if (!userName.trim()) {
       alert("乗務員名を入力してください。");
       return;
     }
-
     const trimmedCode = authCode.trim();
 
-    // 1. アドミンメニュー解放コード判定
     if (trimmedCode === '88888888') {
       setIsAdminUnlocked(true);
       alert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
-      setAuthCode(''); // 入力欄をクリア
-      return; // ログインはせず、メニュー選択状態へ
+      setAuthCode(''); 
+      return; 
     }
 
-    // 2. アドミン解放モードですでにボタンを選んでいる場合は、選択中のロールでそのままログイン
     if (isAdminUnlocked) {
       localStorage.setItem('tatehama_crew_name', userName);
       setIsLoggedIn(true);
@@ -214,9 +213,7 @@ function App() {
       return;
     }
 
-    // 3. 通常コードによる直接裏ルートログイン判定
-    let finalRole = 'driver'; // デフォルトは運転士
-
+    let finalRole = 'driver'; 
     if (trimmedCode === '22223333') {
       finalRole = 'signal';
       alert("🚨 信号係として認証されました。");
@@ -226,9 +223,6 @@ function App() {
     } else if (trimmedCode !== '') {
       alert("❌ 認証コードが正しくありません。");
       return;
-    } else {
-      // コードが空欄の場合は通常通り「運転士」としてログイン
-      finalRole = 'driver';
     }
 
     localStorage.setItem('tatehama_crew_name', userName);
@@ -242,33 +236,59 @@ function App() {
     stopEmergencyBeep();
     setReceivedNotice(null);
     setIsLoggedIn(false);
-    setIsAdminUnlocked(false); // ホームに戻ったらアドミン解放状態もリセット
+    setIsAdminUnlocked(false); 
     setAuthCode('');
     setSelectedRole('driver');
   };
 
+  // 🚊 運転士接続
   const handleDriverConnect = () => {
     let targetFreq = inputFreq.trim();
-    let label = "";
+    let mainLabel = "";
     const chNum = parseInt(targetFreq, 10);
+    
     if (!isNaN(chNum) && chNum >= 1 && chNum <= 80) {
       const calcOffset = 100 + chNum;
       targetFreq = `111.${calcOffset}`;
-      label = `運転台無線 ${chNum}ch (${targetFreq} MHz)`;
+      mainLabel = `${chNum}ch 運転台無線 (${targetFreq} MHz)`;
     } else {
-      label = `無線周波数 (${targetFreq} MHz)`;
+      mainLabel = `カスタム周波数 (${targetFreq} MHz)`;
     }
-    socket.emit('join-frequency', { frequency: targetFreq, displayLabel: label });
+
+    socket.emit('join-frequency', { 
+      frequency: targetFreq, 
+      displayLabel: `${mainLabel} + 📻列車無線(111.000)` 
+    });
+
+    setCurrentDisplayLabel(mainLabel);
+    setSubDisplayLabel("111.000 MHz (全線列車無線共通ch)");
+    setIsConnected(true);
   };
 
+  // 📞 指令員接続
   const handleDispatcherDedicatedConnect = () => {
-    socket.emit('join-frequency', { frequency: '111.000', displayLabel: '指令専用無線 (111.000 MHz)' });
+    socket.emit('join-frequency', { 
+      frequency: '111.000', 
+      displayLabel: '全線列車無線 (111.000 MHz)' 
+    });
+    setCurrentDisplayLabel('全線列車無線 (111.000 MHz)');
+    setSubDisplayLabel('なし (統制指令モード)');
+    setIsConnected(true);
   };
 
+  // 🚨 信号係接続
   const handleSignalConnect = (stationName) => {
     const freqCode = `sig_${stationName}`;
-    const label = `信号VC: ${stationName}`;
-    socket.emit('join-frequency', { frequency: freqCode, displayLabel: label });
+    const mainLabel = `信号所内連絡VC [${stationName}駅]`;
+
+    socket.emit('join-frequency', { 
+      frequency: freqCode, 
+      displayLabel: `信号:${stationName} + 📻列車無線(111.000)` 
+    });
+
+    setCurrentDisplayLabel(mainLabel);
+    setSubDisplayLabel("111.000 MHz (全線列車無線共通ch)");
+    setIsConnected(true);
   };
 
   const handleDisconnect = () => {
@@ -277,7 +297,7 @@ function App() {
     setIsTalking(false);
     setConnectedCount(0);
     setCurrentDisplayLabel('---');
-    setCurrentRawFreq('');
+    setSubDisplayLabel('---');
   };
 
   const handleSendNotice = () => {
@@ -305,13 +325,11 @@ function App() {
     return t.dispatcher;
   };
 
-  // 🛑 ログイン画面（認証コード対応）
+  // 🛑 ログイン画面（バージョン刻印つき）
   if (!isLoggedIn) {
     return (
-      <div className={`app-container theme-${theme} login-screen-wrapper`}>
+      <div className={`app-container theme-${theme} login-screen-wrapper`} style={{position: 'relative'}}>
         <h2>{t.loginTitle}</h2>
-        
-        {/* 乗務員名入力 */}
         <input 
           type="text" 
           className="crew-name-input" 
@@ -319,19 +337,13 @@ function App() {
           onChange={(e) => setUserName(e.target.value)} 
           placeholder={t.namePlaceholder}
         />
-
-        {/* メイン選択エリア */}
         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', width: '100%', alignItems: 'center'}}>
-          
-          {/* 左側：職種ボタンエリア */}
-          <div className="role-grid" style={{gridTemplateColumns: isAdminUnlocked ? '1fr' : '1fr', gap: '15px'}}>
+          <div className="role-grid">
             {!isAdminUnlocked ? (
-              // 🚊 通常時は「運転士」ボタンだけを表示
               <button className="role-select-card active" style={{height: '110px', fontSize: '20px'}}>
                 🚊<br/>{t.driver} (常時選択可能)
               </button>
             ) : (
-              // 🔓 アドミン解除時は「全職種が選べるメニュー」が出現！
               <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
                 <div style={{color: '#56d364', fontSize: '14px', fontWeight: 'bold', textAlign: 'center', marginBottom: '5px'}}>🔓 ADMIN FULL ACCESS UNLOCKED</div>
                 <button className={`role-select-card ${selectedRole === 'driver' ? 'active' : ''}`} style={{height: '55px', fontSize: '15px'}} onClick={() => setSelectedRole('driver')}>🚊 {t.driver}</button>
@@ -340,8 +352,6 @@ function App() {
               </div>
             )}
           </div>
-
-          {/* 右側：暗証番号入力エリア */}
           <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
             <label style={{fontSize: '14px', color: '#8b949e', fontWeight: 'bold'}}>🔒 信号・指令・アドミン用認証コード</label>
             <input 
@@ -349,35 +359,37 @@ function App() {
               className="crew-name-input" 
               style={{fontSize: '22px', padding: '15px', letterSpacing: '4px'}}
               value={authCode} 
-              disabled={isAdminUnlocked} // アドミン解放後はロック
-              onChange={(e) => setAuthCode(e.target.value.replace(/[^0-9]/g, ''))} // 数字のみ
+              disabled={isAdminUnlocked} 
+              onChange={(e) => setAuthCode(e.target.value.replace(/[^0-9]/g, ''))} 
               placeholder={isAdminUnlocked ? "認証完了" : t.codePlaceholder}
               maxLength={8}
             />
             <span style={{fontSize: '11px', color: '#768390'}}>※運転士として乗務する場合は空欄のままで構いません。</span>
           </div>
-
         </div>
-
         <button className="btn-action-primary start-duty-btn" onClick={handleLoginSubmit}>
           {isAdminUnlocked ? "選択した職種で乗務開始" : t.btnLogin}
         </button>
+
+        {/* ⚙️ バージョン表示右下 */}
+        <div style={{position: 'absolute', bottom: '10px', right: '15px', fontSize: '12px', color: '#8b949e', fontFamily: 'monospace'}}>
+          SYSTEM VERSION: {APP_VERSION}
+        </div>
       </div>
     );
   }
 
-  // 無線機メイン画面（変更なし・全職種配置モニター完備）
+  // メイン画面（バージョン表示つき）
   return (
-    <div className={`app-container theme-${theme}`}>
+    <div className={`app-container theme-${theme}`} style={{position: 'relative'}}>
       <header className="app-header">
-        <h1>{t.title}</h1>
+        <h1>{t.title} <span style={{fontSize: '14px', verticalAlign: 'middle', background: '#21262d', padding: '3px 8px', borderRadius: '4px', color: '#8b949e', marginLeft: '10px', fontFamily: 'monospace'}}>{APP_VERSION}</span></h1>
         <div className="header-controls">
           <button className="icon-btn home-btn" onClick={handleGoHome}>{t.home}</button>
           <button className="icon-btn" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
         </div>
       </header>
 
-      {/* 緊急通告アラート */}
       {receivedNotice && (
         <div className="emergency-notice-overlay">
           <div className="emergency-notice-box">
@@ -426,8 +438,14 @@ function App() {
             <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val" style={{color:'#00d2ff'}}>{getRoleText(selectedRole)}</span></div>
-            <div className="lcd-line big-lcd-line"><span className="lcd-lbl">{t.freqLabel}</span><span className="lcd-val green-lcd-text">{currentDisplayLabel}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
+            
+            <div className="lcd-line" style={{borderBottom:'none', paddingBottom:'0'}}><span className="lcd-lbl">{t.freqLabel}</span></div>
+            <div className="lcd-line" style={{paddingTop:'0', paddingBottom:'10px'}}><span className="lcd-val green-lcd-text" style={{fontSize:'20px'}}>{currentDisplayLabel}</span></div>
+            
+            <div className="lcd-line" style={{borderBottom:'none', paddingBottom:'0', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop:'8px'}}><span className="lcd-lbl" style={{color: '#ff9800'}}>{t.subFreqLabel}</span></div>
+            <div className="lcd-line" style={{paddingTop:'0'}}><span className="lcd-val" style={{color: '#ffb74d', fontStyle: 'italic'}}>{subDisplayLabel}</span></div>
+
+            <div className="lcd-line" style={{borderTop: '2px solid #30363d', paddingTop: '8px'}}><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.signalLabel}</span><span className="lcd-val">{isTalking ? t.tx : isConnected ? t.rx : '---'}</span></div>
           </div>
 
@@ -522,12 +540,12 @@ function App() {
             </div>
           ) : (
             <div className="sub-panel-card active-call-status">
-              <p>🔊 現在、通信回線が開通しています。</p>
-              <p>左側のPTTスイッチ、またはキーボードの [{pttKey}] を押しながら交信してください。</p>
+              <p>🔊 現在、複数無線が同時開通しています。</p>
+              <p style={{color: '#ff9800'}}>👉 【メインCH】と【列車無線】の両方の音声を受信（傍受）しています。</p>
+              <p>左側のPTTスイッチを押すと、ご自身の【メインCH】へ向けて発言できます。</p>
             </div>
           )}
 
-          {/* 🖥️ 全社員共通モニター盤 */}
           <div className="dispatcher-monitor-board">
             <h3>🖥️ {t.dispPanelTitle}</h3>
             <div className="monitor-table-container">
