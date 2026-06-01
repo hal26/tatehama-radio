@@ -4,8 +4,8 @@ import { io } from 'socket.io-client';
 // ⚠️ Renderの通信サーバーURL
 const socket = io('https://tatehama-radio.onrender.com');
 
-// 🚀 バージョン管理定数
-const APP_VERSION = "v2.0.0";
+// 🚀 システムバージョン
+const APP_VERSION = "v2.1.0";
 
 const languages = {
   ja: {
@@ -26,7 +26,7 @@ const languages = {
     pttReady: "● PTT長押しでメイン送話",
     pttActive: "✦ メイン送話中 (PTT ON) ✦",
     settings: "設定",
-    home: "🏠 ログアウト・ホーム",
+    home: "🏠 職種選択に戻る",
     langSelect: "言語選択 (Language)",
     themeSelect: "画面テーマ (Theme)",
     themeDark: "黒ベース (Dark)",
@@ -44,7 +44,8 @@ const languages = {
     driverPanelTitle: "運転台無線 ＆ 列車無線 同時設定",
     driverInputHelp: "指定ch(1～80)に接続し、同時に【列車無線】も傍受します",
     signalPanelTitle: "信号所VC ＆ 列車無線 同時選択",
-    dispPanelTitle: "無線通信・社員配置モニター盤"
+    dispPanelTitle: "無線通信・社員配置モニター盤",
+    btnClearAuth: "⚠️ 全設定クリア（ログアウト）"
   }
 };
 
@@ -53,17 +54,18 @@ const signalStationsPage2 = ["大道寺", "藤江", "水越", "高見沢", "日�
 
 function App() {
   const [lang, setLang] = useState('ja');
-  const [theme, setTheme] = useState('dark');
+  // 🎨 テーマ設定を記憶から読み込む
+  const [theme, setTheme] = useState(() => localStorage.getItem('tatehama_theme') || 'dark');
   const t = languages[lang];
 
-  // ログイン・認証管理
+  // ログイン・認証管理（名前、コードをどちらもlocalStorageから自動復元）
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState(() => localStorage.getItem('tatehama_crew_name') || '');
+  const [authCode, setAuthCode] = useState(() => localStorage.getItem('tatehama_auth_code') || ''); 
   const [selectedRole, setSelectedRole] = useState('driver'); 
-  const [authCode, setAuthCode] = useState(''); 
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false); 
 
-  // 無線機内部データ（複数ch対応）
+  // 無線機内部データ
   const [inputFreq, setInputFreq] = useState('1');
   const [currentDisplayLabel, setCurrentDisplayLabel] = useState('---');
   const [subDisplayLabel, setSubDisplayLabel] = useState('---'); 
@@ -88,6 +90,11 @@ function App() {
   const [dispatchMessage, setDispatchMessage] = useState('');
   const [receivedNotice, setReceivedNotice] = useState(null);
   const audioIntervalRef = useRef(null);
+
+  // テーマが切り替わったらlocalStorageに保存する
+  useEffect(() => {
+    localStorage.setItem('tatehama_theme', theme);
+  }, [theme]);
 
   // 警告音
   const startEmergencyBeep = () => {
@@ -191,7 +198,7 @@ function App() {
     };
   }, [isLoggedIn, isConnected, pttKey, isListeningKey, showSettings]);
 
-  // 🔑 暗証番号認証
+  // 🔑 認証＆ログイン
   const handleLoginSubmit = () => {
     if (!userName.trim()) {
       alert("乗務員名を入力してください。");
@@ -202,6 +209,7 @@ function App() {
     if (trimmedCode === '88888888') {
       setIsAdminUnlocked(true);
       alert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
+      // 管理者コード自体は保存せずクリア
       setAuthCode(''); 
       return; 
     }
@@ -217,12 +225,17 @@ function App() {
     if (trimmedCode === '22223333') {
       finalRole = 'signal';
       alert("🚨 信号係として認証されました。");
+      localStorage.setItem('tatehama_auth_code', trimmedCode); // コードをPCに記憶
     } else if (trimmedCode === '44445555') {
       finalRole = 'dispatcher';
       alert("📞 運転指令員として認証されました。");
+      localStorage.setItem('tatehama_auth_code', trimmedCode); // コードをPCに記憶
     } else if (trimmedCode !== '') {
       alert("❌ 認証コードが正しくありません。");
       return;
+    } else {
+      // 空欄の場合はコード記憶を消去（運転士リセット）
+      localStorage.removeItem('tatehama_auth_code');
     }
 
     localStorage.setItem('tatehama_crew_name', userName);
@@ -231,17 +244,35 @@ function App() {
     socket.emit('user-login', { name: userName, role: finalRole });
   };
 
+  // 🔄 画面内の右下「全設定ログアウト」を押した時の処理
+  const handleClearAllStorage = () => {
+    if (window.confirm("保存されている名前、認証コード、テーマ設定をすべて削除してログアウトしますか？")) {
+      handleDisconnect();
+      stopEmergencyBeep();
+      setReceivedNotice(null);
+      localStorage.clear(); // PCの記憶を全消去
+      setUserName('');
+      setAuthCode('');
+      setTheme('dark');
+      setSelectedRole('driver');
+      setIsAdminUnlocked(false);
+      setIsLoggedIn(false);
+      alert("すべての記憶データを消去しました。");
+    }
+  };
+
   const handleGoHome = () => {
     handleDisconnect();
     stopEmergencyBeep();
     setReceivedNotice(null);
     setIsLoggedIn(false);
     setIsAdminUnlocked(false); 
-    setAuthCode('');
+    // ホームに戻る時は、通常コード記憶から再読込
+    setAuthCode(localStorage.getItem('tatehama_auth_code') || '');
     setSelectedRole('driver');
   };
 
-  // 🚊 運転士接続
+  // 運転士接続
   const handleDriverConnect = () => {
     let targetFreq = inputFreq.trim();
     let mainLabel = "";
@@ -265,7 +296,7 @@ function App() {
     setIsConnected(true);
   };
 
-  // 📞 指令員接続
+  // 指令員接続
   const handleDispatcherDedicatedConnect = () => {
     socket.emit('join-frequency', { 
       frequency: '111.000', 
@@ -276,7 +307,7 @@ function App() {
     setIsConnected(true);
   };
 
-  // 🚨 信号係接続
+  // 信号係接続
   const handleSignalConnect = (stationName) => {
     const freqCode = `sig_${stationName}`;
     const mainLabel = `信号所内連絡VC [${stationName}駅]`;
@@ -325,65 +356,97 @@ function App() {
     return t.dispatcher;
   };
 
-  // 🛑 ログイン画面（バージョン刻印つき）
+  // 🛑 ログイン画面（ワイド表示＆コード自動復元対応）
   if (!isLoggedIn) {
     return (
-      <div className={`app-container theme-${theme} login-screen-wrapper`} style={{position: 'relative'}}>
-        <h2>{t.loginTitle}</h2>
-        <input 
-          type="text" 
-          className="crew-name-input" 
-          value={userName} 
-          onChange={(e) => setUserName(e.target.value)} 
-          placeholder={t.namePlaceholder}
-        />
-        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', width: '100%', alignItems: 'center'}}>
-          <div className="role-grid">
-            {!isAdminUnlocked ? (
-              <button className="role-select-card active" style={{height: '110px', fontSize: '20px'}}>
-                🚊<br/>{t.driver} (常時選択可能)
-              </button>
-            ) : (
-              <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-                <div style={{color: '#56d364', fontSize: '14px', fontWeight: 'bold', textAlign: 'center', marginBottom: '5px'}}>🔓 ADMIN FULL ACCESS UNLOCKED</div>
-                <button className={`role-select-card ${selectedRole === 'driver' ? 'active' : ''}`} style={{height: '55px', fontSize: '15px'}} onClick={() => setSelectedRole('driver')}>🚊 {t.driver}</button>
-                <button className={`role-select-card ${selectedRole === 'signal' ? 'active' : ''}`} style={{height: '55px', fontSize: '15px'}} onClick={() => setSelectedRole('signal')}>🚨 {t.signal}</button>
-                <button className={`role-select-card ${selectedRole === 'dispatcher' ? 'active' : ''}`} style={{height: '55px', fontSize: '15px'}} onClick={() => setSelectedRole('dispatcher')}>📞 {t.dispatcher}</button>
-              </div>
-            )}
-          </div>
-          <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-            <label style={{fontSize: '14px', color: '#8b949e', fontWeight: 'bold'}}>🔒 信号・指令・アドミン用認証コード</label>
-            <input 
-              type="password" 
-              className="crew-name-input" 
-              style={{fontSize: '22px', padding: '15px', letterSpacing: '4px'}}
-              value={authCode} 
-              disabled={isAdminUnlocked} 
-              onChange={(e) => setAuthCode(e.target.value.replace(/[^0-9]/g, ''))} 
-              placeholder={isAdminUnlocked ? "認証完了" : t.codePlaceholder}
-              maxLength={8}
-            />
-            <span style={{fontSize: '11px', color: '#768390'}}>※運転士として乗務する場合は空欄のままで構いません。</span>
-          </div>
+      <div className={`app-container theme-${theme} login-screen-page-wrapper`}>
+        {/* 画面右上：ログイン前でも色反転設定をいじれるように設置 */}
+        <div style={{position: 'absolute', top: '20px', right: '30px', zindex: 10}}>
+          <button className="icon-btn" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
         </div>
-        <button className="btn-action-primary start-duty-btn" onClick={handleLoginSubmit}>
-          {isAdminUnlocked ? "選択した職種で乗務開始" : t.btnLogin}
-        </button>
 
-        {/* ⚙️ バージョン表示右下 */}
-        <div style={{position: 'absolute', bottom: '10px', right: '15px', fontSize: '12px', color: '#8b949e', fontFamily: 'monospace'}}>
-          SYSTEM VERSION: {APP_VERSION}
+        {showSettings && (
+          <div className="settings-overlay">
+            <div className="settings-box">
+              <h3>⚙️ {t.settings}</h3>
+              <label>{t.themeSelect}</label>
+              <select value={theme} onChange={(e) => setTheme(e.target.value)} className="lang-select">
+                <option value="dark">{t.themeDark}</option>
+                <option value="light">{t.themeLight}</option>
+              </select>
+              <hr />
+              <button className="btn-close" onClick={() => setShowSettings(false)}>X</button>
+            </div>
+          </div>
+        )}
+
+        <div className="login-card-panel">
+          <h2>{t.loginTitle}</h2>
+          
+          <div className="login-field-row">
+            <label className="field-lbl">👤 乗務員名（保存されます）</label>
+            <input 
+              type="text" 
+              className="crew-name-input-wide" 
+              value={userName} 
+              onChange={(e) => setUserName(e.target.value)} 
+              placeholder={t.namePlaceholder}
+            />
+          </div>
+
+          <div className="login-grid-two-column">
+            {/* 左側：職種メニュー */}
+            <div className="login-left-box">
+              <label className="field-lbl">🚊 担当職種選択</label>
+              {!isAdminUnlocked ? (
+                <button className="role-select-card-wide active">
+                  🚊 {t.driver} (常時解放ルート)
+                </button>
+              ) : (
+                <div className="admin-unlocked-menu-list">
+                  <div className="admin-badge-txt">🔓 ADMIN FULL ACCESS ACTIVE</div>
+                  <button className={`role-select-card-wide ${selectedRole === 'driver' ? 'active' : ''}`} onClick={() => setSelectedRole('driver')}>🚊 {t.driver}</button>
+                  <button className={`role-select-card-wide ${selectedRole === 'signal' ? 'active' : ''}`} onClick={() => setSelectedRole('signal')}>🚨 {t.signal}</button>
+                  <button className={`role-select-card-wide ${selectedRole === 'dispatcher' ? 'active' : ''}`} onClick={() => setSelectedRole('dispatcher')}>📞 {t.dispatcher}</button>
+                </div>
+              )}
+            </div>
+
+            {/* 右側：コード入力 */}
+            <div className="login-right-box">
+              <label className="field-lbl">🔒 特務認証コード（保存されます）</label>
+              <input 
+                type="password" 
+                className="crew-code-input-wide" 
+                value={authCode} 
+                disabled={isAdminUnlocked} 
+                onChange={(e) => setAuthCode(e.target.value.replace(/[^0-9]/g, ''))} 
+                placeholder={isAdminUnlocked ? "認証パス完了" : t.codePlaceholder}
+                maxLength={8}
+              />
+              <p className="code-sub-notice">※運転士は空欄でOK。信号・指令・アドミンのコードを入れると自動で記憶されます。</p>
+            </div>
+          </div>
+
+          <button className="btn-action-primary start-duty-btn-wide" onClick={handleLoginSubmit}>
+            {isAdminUnlocked ? "選択した職種で乗務開始 (ADMIN)" : t.btnLogin}
+          </button>
+        </div>
+
+        {/* ⚙️ 下部システム情報エリア */}
+        <div className="login-footer-info-bar">
+          <span>SYSTEM VERSION: {APP_VERSION}</span>
+          <button className="btn-logout-clear" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
         </div>
       </div>
     );
   }
 
-  // メイン画面（バージョン表示つき）
+  // 無線機メイン画面
   return (
-    <div className={`app-container theme-${theme}`} style={{position: 'relative'}}>
+    <div className={`app-container theme-${theme}`}>
       <header className="app-header">
-        <h1>{t.title} <span style={{fontSize: '14px', verticalAlign: 'middle', background: '#21262d', padding: '3px 8px', borderRadius: '4px', color: '#8b949e', marginLeft: '10px', fontFamily: 'monospace'}}>{APP_VERSION}</span></h1>
+        <h1>{t.title} <span className="version-badge-tag">{APP_VERSION}</span></h1>
         <div className="header-controls">
           <button className="icon-btn home-btn" onClick={handleGoHome}>{t.home}</button>
           <button className="icon-btn" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
@@ -437,13 +500,13 @@ function App() {
           <div className="radio-display-lcd">
             <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val" style={{color:'#00d2ff'}}>{getRoleText(selectedRole)}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val role-name-color-lcd">{getRoleText(selectedRole)}</span></div>
             
             <div className="lcd-line" style={{borderBottom:'none', paddingBottom:'0'}}><span className="lcd-lbl">{t.freqLabel}</span></div>
-            <div className="lcd-line" style={{paddingTop:'0', paddingBottom:'10px'}}><span className="lcd-val green-lcd-text" style={{fontSize:'20px'}}>{currentDisplayLabel}</span></div>
+            <div className="lcd-line" style={{paddingTop:'0', paddingBottom:'10px'}}><span className="lcd-val green-lcd-text" style={{fontSize:'22px'}}>{currentDisplayLabel}</span></div>
             
             <div className="lcd-line" style={{borderBottom:'none', paddingBottom:'0', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop:'8px'}}><span className="lcd-lbl" style={{color: '#ff9800'}}>{t.subFreqLabel}</span></div>
-            <div className="lcd-line" style={{paddingTop:'0'}}><span className="lcd-val" style={{color: '#ffb74d', fontStyle: 'italic'}}>{subDisplayLabel}</span></div>
+            <div className="lcd-line" style={{paddingTop:'0'}}><span className="lcd-val sub-lcd-orange-text">{subDisplayLabel}</span></div>
 
             <div className="lcd-line" style={{borderTop: '2px solid #30363d', paddingTop: '8px'}}><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.signalLabel}</span><span className="lcd-val">{isTalking ? t.tx : isConnected ? t.rx : '---'}</span></div>
@@ -572,6 +635,11 @@ function App() {
           </div>
 
         </div>
+      </div>
+
+      {/* ⚙️ メイン画面右下のログアウト配置 */}
+      <div style={{position: 'absolute', bottom: '8px', right: '15px', zIndex: 5}}>
+        <button className="btn-logout-clear-mini" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
       </div>
     </div>
   );

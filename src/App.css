@@ -1,11 +1,10 @@
-/* --- 1920x1080 館浜電鉄 運行管理卓専用CSS (完全黒ベース) --- */
+/* --- 1920x1080 館浜電鉄 運行管理卓専用CSS (Version 2.1.0) --- */
 body { 
   margin: 0; 
   font-family: monospace, sans-serif; 
   user-select: none; 
   overflow: hidden; 
-  background-color: #0d1117 !important; /* 確実に背景を漆黒に */
-  color: #c9d1d9 !important;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .app-container { 
@@ -15,66 +14,87 @@ body {
   width: 100vw; 
   height: 100vh; 
   box-sizing: border-box; 
-  background-color: #0d1117 !important;
+  position: relative;
 }
 
-/* ヘッダー周り */
-.app-header { 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
-  border-bottom: 3px solid #30363d; 
-  padding-bottom: 12px; 
-  margin-bottom: 20px; 
-  height: 50px; 
-}
+/* 🌙 ダークテーマ */
+.theme-dark { background-color: #0d1117 !important; color: #c9d1d9 !important; }
+.theme-dark .icon-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+.theme-dark .sub-panel-card { background: #161b22 !important; border: 2px solid #30363d; }
+.theme-dark .crew-name-input-wide, .theme-dark .crew-code-input-wide, .theme-dark .freq-digit-input { background: #010409; color: #fff; border: 2px solid #30363d; }
+.theme-dark .radio-display-lcd { background-color: #050c06 !important; border: 4px solid #444c56; box-shadow: inset 0 0 15px rgba(0,0,0,0.9); }
+.theme-dark .lcd-line { border-bottom: 1px dashed rgba(255,255,255,0.08); color: #fff; }
+.theme-dark .role-name-color-lcd { color: #00d2ff; }
+.theme-dark .sub-lcd-orange-text { color: #ffb74d; }
+.theme-dark .monitor-table th { background: #21262d; color: #8b949e; }
+.theme-dark .monitor-table td { border-bottom: 1px solid #30363d; color: #fff; }
+
+/* ☀️ ライトテーマ（白黒完全反転） */
+.theme-light { background-color: #f6f8fa !important; color: #24292f !important; }
+.theme-light .app-header h1 { color: #d35400; }
+.theme-light .icon-btn { background: #ffffff; color: #24292f; border: 1px solid #d0d7de; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.theme-light .sub-panel-card { background: #ffffff !important; border: 2px solid #d0d7de; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.theme-light .crew-name-input-wide, .theme-light .crew-code-input-wide, .theme-light .freq-digit-input { background: #ffffff; color: #24292f; border: 2px solid #d0d7de; }
+.theme-light .radio-display-lcd { background-color: #eef3f0 !important; border: 4px solid #8c959f; box-shadow: inset 0 0 15px rgba(0,0,0,0.1); }
+.theme-light .lcd-line { border-bottom: 1px dashed rgba(0,0,0,0.12); color: #24292f; }
+.theme-light .lcd-lbl { color: #196f3d; }
+.theme-light .green-lcd-text { color: #1a7f37 !important; text-shadow: none; }
+.theme-light .role-name-color-lcd { color: #0066cc; }
+.theme-light .sub-lcd-orange-text { color: #b76200; }
+.theme-light .monitor-table th { background: #eaeef2; color: #57606a; }
+.theme-light .monitor-table td { border-bottom: 1px solid #d0d7de; color: #24292f; }
+.theme-light .loc-text { color: #1a7f37; }
+.theme-light .login-card-panel { background: #ffffff; border: 2px solid #d0d7de; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+.theme-light .role-select-card-wide { background: #f6f8fa; color: #24292f; border: 2px solid #d0d7de; }
+
+/* ヘッダー */
+.app-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #30363d; padding-bottom: 12px; margin-bottom: 20px; height: 50px; }
+.theme-light .app-header { border-bottom-color: #d0d7de; }
 .app-header h1 { font-size: 26px; margin: 0; color: #f9826c; font-weight: bold; letter-spacing: 2px; }
+.version-badge-tag { font-size: 14px; vertical-align: middle; background: #21262d; padding: 3px 8px; border-radius: 4px; color: #8b949e; marginLeft: '10px'; font-family: monospace; }
+.theme-light .version-badge-tag { background: #eaeef2; color: #57606a; }
 .header-controls { display: flex; gap: 12px; }
-.icon-btn { font-size: 14px; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+.icon-btn { font-size: 14px; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
 .home-btn { background-color: #1f6feb !important; color: white !important; border: none !important; }
 
-/* 🛑 ログイン画面 */
-.login-screen-wrapper { 
-  display: flex; 
-  flex-direction: column; 
-  align-items: center; 
-  justify-content: center; 
-  flex-grow: 1; 
-  max-width: 700px; 
-  margin: 0 auto; 
-  width: 100%; 
-  gap: 20px;
-}
-.login-screen-wrapper h2 { font-size: 24px; color: #fff; }
-.crew-name-input { width: 100%; padding: 15px; font-size: 20px; text-align: center; border-radius: 8px; box-sizing: border-box; background: #010409; color: #fff; border: 2px solid #30363d; }
-.role-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; width: 100%; }
-.role-select-card { height: 130px; background: #21262d; border: 3px solid transparent; color: white; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; }
-.role-select-card.active { border-color: #f9826c; background: #161b22; box-shadow: 0 0 15px rgba(249,130,108,0.3); }
-.start-duty-btn { width: 100%; padding: 15px; font-size: 20px; background: #1f6feb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+/* 🪐 1080p対応：横幅いっぱいに広がる超ワイドログインUI */
+.login-screen-page-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1; width: 100vw; height: 100vh; }
+.login-card-panel { width: 90%; max-width: 1000px; background: #161b22; border: 2px solid #30363d; border-radius: 12px; padding: 40px; box-sizing: border-box; }
+.login-card-panel h2 { font-size: 28px; text-align: center; margin-top: 0; margin-bottom: 30px; letter-spacing: 1px; }
 
-/* 🎛️ 左右分割レイアウト */
-.main-cockpit-grid { 
-  display: grid; 
-  grid-template-columns: 480px 1fr; 
-  gap: 25px; 
-  flex-grow: 1; 
-  height: calc(100vh - 110px); 
-  overflow: hidden; 
-}
+.login-field-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 25px; width: 100%; }
+.field-lbl { font-size: 15px; color: #8b949e; font-weight: bold; display: block; }
+.theme-light .field-lbl { color: #57606a; }
 
-/* 左側：無線機液晶パネル */
+.crew-name-input-wide { width: 100%; padding: 16px; font-size: 22px; text-align: center; border-radius: 8px; box-sizing: border-box; font-weight: bold; }
+.login-grid-two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 30px; width: 100%; }
+
+.login-left-box, .login-right-box { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.role-select-card-wide { width: 100%; height: 60px; background: #21262d; border: 2px solid transparent; color: white; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; text-align: center; transition: 0.15s; }
+.role-select-card-wide.active { border-color: #f9826c; background: #161b22; box-shadow: 0 0 15px rgba(249,130,108,0.25); }
+.theme-light .role-select-card-wide.active { background: #fff5f2; border-color: #f9826c; color: #f9826c; }
+
+.admin-unlocked-menu-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.admin-badge-txt { color: #56d364; font-size: 13px; font-weight: bold; text-align: center; }
+
+.crew-code-input-wide { width: 100%; padding: 15px; font-size: 22px; text-align: center; border-radius: 8px; box-sizing: border-box; font-weight: bold; letter-spacing: 6px; }
+.code-sub-notice { font-size: 12px; color: #768390; margin: 0; }
+
+.start-duty-btn-wide { width: 100%; padding: 18px; font-size: 22px; background: #1f6feb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 5px 0 #114ba8; }
+.start-duty-btn-wide:active { transform: translateY(3px); box-shadow: 0 2px 0 #114ba8; }
+
+/* フッター情報バー */
+.login-footer-info-bar { position: absolute; bottom: 15px; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; font-size: 13px; color: #8b949e; align-items: center; }
+.btn-logout-clear { background: #f85149; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; }
+.btn-logout-clear-mini { background: rgba(248,81,73,0.2); color: #ff7b72; border: 1px solid rgba(248,81,73,0.4); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; }
+.theme-light .btn-logout-clear-mini { background: #fdf2f2; color: #f85149; border-color: #f85149; }
+.btn-logout-clear:hover, .btn-logout-clear-mini:hover { opacity: 0.8; }
+
+/* 🎛️ 左右分割コクピットレイアウト */
+.main-cockpit-grid { display: grid; grid-template-columns: 480px 1fr; gap: 25px; flex-grow: 1; height: calc(100vh - 110px); overflow: hidden; }
 .cockpit-left-monitor { display: flex; flex-direction: column; gap: 15px; height: 100%; }
-.radio-display-lcd { 
-  background-color: #050c06 !important; 
-  border: 4px solid #444c56; 
-  border-radius: 10px; 
-  padding: 20px; 
-  display: flex; 
-  flex-direction: column; 
-  gap: 12px; 
-  box-shadow: inset 0 0 15px rgba(0,0,0,0.9); 
-}
-.lcd-line { display: flex; justify-content: space-between; font-size: 15px; border-bottom: 1px dashed rgba(255,255,255,0.08); padding-bottom: 4px; color: #fff; }
+.radio-display-lcd { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.lcd-line { display: flex; justify-content: space-between; font-size: 15px; padding-bottom: 4px; }
 .lcd-lbl { color: #57ab5a; font-weight: bold; }
 .lcd-val { font-weight: bold; }
 .lcd-val.on { color: #56d364; text-shadow: 0 0 8px rgba(86,211,100,0.4); }
@@ -83,41 +103,20 @@ body {
 .big-lcd-line { flex-direction: column; gap: 8px; padding: 12px 0; border-top: 2px solid #30363d; border-bottom: 2px solid #30363d; }
 .green-lcd-text { font-size: 26px; color: #39d353; text-shadow: 0 0 10px rgba(57,211,83,0.5); font-weight: bold; }
 
-/* 送話ボタン周り */
+/* 送話ボタン */
 .in-call-controls { display: flex; flex-direction: column; gap: 12px; margin-top: auto; }
 .ctrl-buttons-row { display: grid; grid-template-columns: 1fr; }
 .btn-cockpit.danger { padding: 12px; font-size: 16px; font-weight: bold; border-radius: 6px; border: none; cursor: pointer; background: #6e7681; color: white; }
-.ptt-hardware-button { 
-  height: 95px; 
-  background: #da5b0b; 
-  color: white; 
-  font-size: 20px; 
-  font-weight: bold; 
-  border-radius: 10px; 
-  border: none; 
-  cursor: pointer; 
-  box-shadow: 0 6px 0 #9e3f03; 
-}
-.ptt-hardware-button:active, .ptt-hardware-button.active { 
-  background: #238636; 
-  box-shadow: 0 1px 0 #1a6528; 
-  transform: translateY(5px); 
-}
+.ptt-hardware-button { height: 95px; background: #da5b0b; color: white; font-size: 20px; font-weight: bold; border-radius: 10px; border: none; cursor: pointer; box-shadow: 0 6px 0 #9e3f03; }
+.ptt-hardware-button:active, .ptt-hardware-button.active { background: #238636; box-shadow: 0 1px 0 #1a6528; transform: translateY(5px); }
 
 /* 右側：操作卓カード */
 .cockpit-right-panel { display: flex; flex-direction: column; gap: 15px; overflow-y: auto; height: 100%; }
 .right-panel-scroll-box { width: 100%; }
-
-.sub-panel-card { 
-  padding: 20px; 
-  border-radius: 10px; 
-  box-sizing: border-box; 
-  background: #161b22 !important; 
-  border: 2px solid #30363d; 
-}
+.sub-panel-card { padding: 20px; border-radius: 10px; box-sizing: border-box; }
 .sub-panel-card h3 { margin: 0 0 10px 0; font-size: 18px; color: #f9826c; border-left: 4px solid #f9826c; padding-left: 8px; }
 .help-text { font-size: 14px; color: #768390; margin: 0 0 15px 0; }
-.freq-digit-input { width: 100%; padding: 12px; font-size: 28px; text-align: center; border-radius: 6px; margin-bottom: 15px; box-sizing: border-box; font-weight: bold; background: #010409; color: #fff; border: 2px solid #30363d; }
+.freq-digit-input { width: 100%; padding: 12px; font-size: 28px; text-align: center; border-radius: 6px; margin-bottom: 15px; box-sizing: border-box; font-weight: bold; }
 
 /* 信号ボタン */
 .signal-buttons-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
@@ -128,30 +127,24 @@ body {
 .btn-pager:disabled { opacity: 0.2; }
 
 /* 🖥️ 指令モニター盤テーブル */
-.dispatcher-monitor-board { 
-  background: #161b22 !important; 
-  border: 3px solid #f85149; 
-  border-radius: 10px; 
-  padding: 15px; 
-  margin-top: 5px;
-}
+.dispatcher-monitor-board { background: #161b22 !important; border: 3px solid #f85149; border-radius: 10px; padding: 15px; margin-top: 5px; }
 .dispatcher-monitor-board h3 { margin: 0 0 12px 0; font-size: 16px; color: #ff7b72; font-weight: bold; }
 .monitor-table-container { overflow-y: auto; max-height: 220px; }
 .monitor-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
-.monitor-table th, .monitor-table td { padding: 10px; border-bottom: 1px solid #30363d; color: #fff; }
-.monitor-table th { background: #21262d; color: #8b949e; font-weight: bold; }
+.monitor-table th, .monitor-table td { padding: 10px; }
+.monitor-table th { font-weight: bold; }
 .badge { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
 .badge.role-driver { background: #1f6feb; color: white; }
 .badge.role-signal { background: #238636; color: white; }
 .badge.role-dispatcher { background: #f85149; color: white; }
 .loc-text { color: #56d364; font-weight: bold; }
 
-/* ⚙️ 設定画面 */
+/* 設定画面 */
 .settings-overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 99; }
 .settings-box { background: #161b22; padding: 25px; border-radius: 10px; width: 400px; color: white; position: relative; border: 2px solid #30363d; }
 .settings-box h3 { margin-top: 0; font-size: 18px; color: #f9826c; }
 .settings-box label { display: block; font-size: 13px; margin: 12px 0 4px; color: #8b949e; font-weight: bold; }
-.lang-select, .btn-keybind-capture { width: 100%; padding: 10px; background: #010409; color: white; border: 2px solid #30363d; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+.lang-select, .btn-keybind-capture { width: 100%; padding: 10px; background: #010409; color: white; border: 2px solid #30363d; border-radius: 6px; font-size: 14px; box-sizing: border-box; font-weight: bold; }
 .btn-keybind-capture { border: 2px dashed #f9826c; cursor: pointer; text-align: center; background: #21262d; }
 .btn-close { position: absolute; top: 12px; right: 12px; background: #f85149; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; }
 
