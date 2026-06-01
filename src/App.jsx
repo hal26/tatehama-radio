@@ -1,37 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 
-// ⚠️ Renderの通信サーバーURL
 const socket = io('https://tatehama-radio.onrender.com');
 
-// 🚀 システムバージョン
-const APP_VERSION = "v2.1.2";
+// 🚀 指令統制強化・テンキー追加アップデート！
+const APP_VERSION = "v3.1.0";
 
 const languages = {
   ja: {
     title: "館浜電鉄 運行管理無線システム",
     statusLabel: "STATUS:",
     standby: "STANDBY (未接続)",
-    online: "ONLINE (複数無線接続中)",
-    freqLabel: "MAIN CH/LOC:",
-    subFreqLabel: "SUB CH (受令):",
+    online: "ONLINE (3ch同時受令中)",
     membersLabel: "MEMBERS:",
     signalLabel: "SIGNAL:",
     roleLabel: "ROLE:",
     userLabel: "NAME:",
-    tx: "■ TX (メイン送信中)",
+    tx: "■ TX (送信中)",
     rx: "□ RX (全線待機中)",
-    btnConnect: "複数無線 接続開始",
+    btnConnect: "マルチ無線 接続開始",
     btnDisconnect: "全回線切断",
-    pttReady: "● PTT長押しでメイン送話",
-    pttActive: "✦ メイン送話中 (PTT ON) ✦",
     settings: "設定",
     home: "🏠 職種選択に戻る",
     langSelect: "言語選択 (Language)",
     themeSelect: "画面テーマ (Theme)",
     themeDark: "黒ベース (Dark)",
     themeLight: "白ベース (Light)",
-    keybindLabel: "PTTキー設定",
     audioInputLabel: "マイク入力デバイス (🎤)",
     audioOutputLabel: "スピーカー出力デバイス (🔊)",
     loginTitle: "乗務員登録 ＆ 職種認証ログイン",
@@ -41,9 +35,9 @@ const languages = {
     signal: "信号係",
     dispatcher: "運転指令員",
     btnLogin: "乗務開始",
-    driverPanelTitle: "運転台無線 ＆ 列車無線 同時設定",
-    driverInputHelp: "指定ch(1～80)に接続し、同時に【列車無線】も傍受します",
-    signalPanelTitle: "信号所VC ＆ 列車無線 同時選択",
+    driverPanelTitle: "運転台無線 3ch同時受令設定",
+    driverInputHelp: "指定chに接続し、同時に【列車無線】【信号指令連絡波】も自動受令します",
+    signalPanelTitle: "信号所VC 3ch同時受令選択",
     dispPanelTitle: "無線通信・社員配置モニター盤",
     btnClearAuth: "⚠️ 全設定クリア（ログアウト）"
   }
@@ -66,23 +60,39 @@ function App() {
 
   // 無線機内部データ
   const [inputFreq, setInputFreq] = useState('1');
-  const [currentDisplayLabel, setCurrentDisplayLabel] = useState('---');
-  const [subDisplayLabel, setSubDisplayLabel] = useState('---'); 
+  const [ch1Label, setCh1Label] = useState('---');
+  const [ch2Label, setCh2Label] = useState('---');
+  const [ch3Label, setCh3Label] = useState('---');
   const [isConnected, setIsConnected] = useState(false);
-  const [isTalking, setIsTalking] = useState(false);
   const [connectedCount, setConnectedCount] = useState(0);
 
   const [signalPage, setSignalPage] = useState(1);
   const [monitorData, setMonitorData] = useState([]);
 
-  // 設定・デバイス
+  // 🔊 3ch独立受話ミュート状態
+  const [muteCh1, setMuteCh1] = useState(false);
+  const [muteCh2, setMuteCh2] = useState(false);
+  const [muteCh3, setMuteCh3] = useState(false);
+
+  // 🎤 3ch独立PTT送信状態
+  const [isTalkingCh1, setIsTalkingCh1] = useState(false);
+  const [isTalkingCh2, setIsTalkingCh2] = useState(false);
+  const [isTalkingCh3, setIsTalkingCh3] = useState(false);
+
+  // ⌨️ PTTキー設定
+  const [pttKeyCh1, setPttKeyCh1] = useState('Space');
+  const [pttKeyCh2, setPttKeyCh2] = useState('KeyV');
+  const [pttKeyCh3, setPttKeyCh3] = useState('KeyB');
+  
+  const [activeCaptureCh, setActiveCaptureCh] = useState(null); 
   const [showSettings, setShowSettings] = useState(false);
-  const [pttKey, setPttKey] = useState('Space');
-  const [isListeningKey, setIsListeningKey] = useState(false);
   const [audioInputs, setAudioInputs] = useState([]);
   const [audioOutputs, setAudioOutputs] = useState([]);
   const [selectedInput, setSelectedInput] = useState('');
   const [selectedOutput, setSelectedOutput] = useState('');
+
+  // 📝 指令入力中のキーボード誤作動防止フラグ（これの制御ミスが原因でした）
+  const [isTyping, setIsTyping] = useState(false);
 
   // 指令通告メッセージ
   const [dispatchTarget, setDispatchTarget] = useState('');
@@ -119,7 +129,6 @@ function App() {
     }
   };
 
-  // デバイス取得
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then(() => {
@@ -144,7 +153,7 @@ function App() {
       setIsConnected(false);
     });
 
-    socket.on('join-success', ({ frequency, displayLabel }) => {
+    socket.on('join-success', () => {
       setIsConnected(true);
     });
 
@@ -164,39 +173,53 @@ function App() {
     };
   }, [userName]);
 
-  // PTTキーボード
+  // ⌨️ キーボードイベント（文字入力中はPTTを完全に無視するように改良）
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (isListeningKey) {
+      if (activeCaptureCh !== null) {
         e.preventDefault();
-        setPttKey(e.code);
-        setIsListeningKey(false);
+        if (activeCaptureCh === 1) setPttKeyCh1(e.code);
+        if (activeCaptureCh === 2) setPttKeyCh2(e.code);
+        if (activeCaptureCh === 3) setPttKeyCh3(e.code);
+        setActiveCaptureCh(null);
         return;
       }
+
+      // 何か文字や数字をタイピング入力している間はPTTキー判定を完全スルー！
+      if (isTyping) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault(); 
+      }
+
       if (isLoggedIn && isConnected && !showSettings) {
-        if (e.code === (pttKey === 'Space' ? 'Space' : pttKey)) {
-          e.preventDefault();
-          setIsTalking(true);
-        }
+        if (e.code === pttKeyCh1) { e.preventDefault(); setIsTalkingCh1(true); }
+        if (e.code === pttKeyCh2) { e.preventDefault(); setIsTalkingCh2(true); }
+        if (e.code === pttKeyCh3) { e.preventDefault(); setIsTalkingCh3(true); }
       }
     };
+
     const handleKeyUp = (e) => {
+      if (isTyping) return;
+
       if (isLoggedIn && isConnected && !showSettings) {
-        if (e.code === (pttKey === 'Space' ? 'Space' : pttKey)) {
-          e.preventDefault();
-          setIsTalking(false);
-        }
+        if (e.code === pttKeyCh1) { e.preventDefault(); setIsTalkingCh1(false); }
+        if (e.code === pttKeyCh2) { e.preventDefault(); setIsTalkingCh2(false); }
+        if (e.code === pttKeyCh3) { e.preventDefault(); setIsTalkingCh3(false); }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isLoggedIn, isConnected, pttKey, isListeningKey, showSettings]);
+  }, [isLoggedIn, isConnected, pttKeyCh1, pttKeyCh2, pttKeyCh3, activeCaptureCh, showSettings, isTyping]);
 
-  // 🔑 認証＆ログイン
+  // 🔑 認証ログイン
   const handleLoginSubmit = () => {
     if (!userName.trim()) {
       alert("乗務員名を入力してください。");
@@ -204,7 +227,6 @@ function App() {
     }
     const trimmedCode = authCode.trim();
 
-    // アドミン解放コード判定
     if (trimmedCode === '88888888') {
       setIsAdminUnlocked(true);
       alert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
@@ -212,7 +234,6 @@ function App() {
       return; 
     }
 
-    // アドミン解放モードで乗務開始
     if (isAdminUnlocked) {
       localStorage.setItem('tatehama_crew_name', userName);
       setIsLoggedIn(true);
@@ -220,7 +241,6 @@ function App() {
       return;
     }
 
-    // 通常コード判定
     let finalRole = 'driver'; 
     if (trimmedCode === '22223333') {
       finalRole = 'signal';
@@ -243,44 +263,36 @@ function App() {
     socket.emit('user-login', { name: userName, role: finalRole });
   };
 
-  // 🔄 右下「全設定クリア（ログアウト）」完全初期化
   const handleClearAllStorage = () => {
     if (window.confirm("保存されている名前、認証コード、テーマ設定をすべて削除して完全にログアウトしますか？")) {
       handleDisconnect();
       stopEmergencyBeep();
       setReceivedNotice(null);
-      
-      localStorage.clear(); // 保存領域を完全リセット
-      
-      // ✨ フォームを完全にフリーに打ち直せるようすべてのステートをリセット
+      localStorage.clear(); 
       setUserName('');
       setAuthCode('');
       setIsAdminUnlocked(false);
       setSelectedRole('driver');
       setIsLoggedIn(false);
       setTheme('dark');
+      setIsTyping(false);
       alert("すべての記憶データを完全に消去しました。再入力が可能です。");
     }
   };
 
-  // 🏠 メイン画面から職種選択（ログイン前）に戻る際のロック解除処理
   const handleGoHome = () => {
     handleDisconnect();
     stopEmergencyBeep();
     setReceivedNotice(null);
-    
-    // ✨【バグ修正】戻った瞬間にアドミンロックなどを完全に解除し、打ち込める状態に戻す
     setIsAdminUnlocked(false); 
     setIsLoggedIn(false);
-    
-    // 保存されているデータを引っ張ってきて再セット
-    const savedName = localStorage.getItem('tatehama_crew_name') || '';
-    const savedCode = localStorage.getItem('tatehama_auth_code') || '';
-    setUserName(savedName);
-    setAuthCode(savedCode);
+    setIsTyping(false);
+    setUserName(localStorage.getItem('tatehama_crew_name') || '');
+    setAuthCode(localStorage.getItem('tatehama_auth_code') || '');
     setSelectedRole('driver');
   };
 
+  // 🚊 運転士接続
   const handleDriverConnect = () => {
     let targetFreq = inputFreq.trim();
     let mainLabel = "";
@@ -296,45 +308,53 @@ function App() {
 
     socket.emit('join-frequency', { 
       frequency: targetFreq, 
-      displayLabel: `${mainLabel} + 📻列車無線(111.000)` 
+      displayLabel: `${mainLabel} + 📻列車 + 📻連絡` 
     });
 
-    setCurrentDisplayLabel(mainLabel);
-    setSubDisplayLabel("111.000 MHz (全線列車無線共通ch)");
+    setCh1Label(mainLabel);
+    setCh2Label("111.000 MHz (全線列車無線共通波)");
+    setCh3Label("111.900 MHz (全線共通 信号指令連絡波)");
     setIsConnected(true);
   };
 
+  // 📞 指令員接続
   const handleDispatcherDedicatedConnect = () => {
     socket.emit('join-frequency', { 
       frequency: '111.000', 
-      displayLabel: '全線列車無線 (111.000 MHz)' 
+      displayLabel: '全線列車無線統合管理' 
     });
-    setCurrentDisplayLabel('全線列車無線 (111.000 MHz)');
-    setSubDisplayLabel('なし (統制指令モード)');
+    setCh1Label('111.000 MHz (全線列車無線共通波)');
+    setCh2Label('111.900 MHz (全線共通 信号指令連絡波)');
+    setCh3Label('なし (統制指令モード)');
     setIsConnected(true);
   };
 
+  // 🚨 信号係接続
   const handleSignalConnect = (stationName) => {
     const freqCode = `sig_${stationName}`;
     const mainLabel = `信号所内連絡VC [${stationName}駅]`;
 
     socket.emit('join-frequency', { 
       frequency: freqCode, 
-      displayLabel: `信号:${stationName} + 📻列車無線(111.000)` 
+      displayLabel: `信号:${stationName} + 📻列車 + 📻連絡` 
     });
 
-    setCurrentDisplayLabel(mainLabel);
-    setSubDisplayLabel("111.000 MHz (全線列車無線共通ch)");
+    setCh1Label(mainLabel);
+    setCh2Label("111.000 MHz (全線列車無線共通波)");
+    setCh3Label("111.900 MHz (全線共通 信号指令連絡波)");
     setIsConnected(true);
   };
 
   const handleDisconnect = () => {
     socket.emit('leave-frequency');
     setIsConnected(false);
-    setIsTalking(false);
+    setIsTalkingCh1(false);
+    setIsTalkingCh2(false);
+    setIsTalkingCh3(false);
     setConnectedCount(0);
-    setCurrentDisplayLabel('---');
-    setSubDisplayLabel('---');
+    setCh1Label('---');
+    setCh2Label('---');
+    setCh3Label('---');
   };
 
   const handleSendNotice = () => {
@@ -351,6 +371,18 @@ function App() {
     setDispatchMessage('');
   };
 
+  // 📱 スクリーンテンキーカチカチ処理用関数
+  const handleKeypadPress = (num) => {
+    if (num === '修正') {
+      setInputFreq('');
+    } else {
+      // チャンネル番号は最大3桁（1〜80等）を想定
+      if (inputFreq.length < 4) {
+        setInputFreq(inputFreq + num);
+      }
+    }
+  };
+
   const handleConfirmNotice = () => {
     stopEmergencyBeep();
     setReceivedNotice(null);
@@ -362,6 +394,7 @@ function App() {
     return t.dispatcher;
   };
 
+  // 🛑 ログイン画面
   if (!isLoggedIn) {
     return (
       <div className={`app-container theme-${theme} login-screen-page-wrapper`}>
@@ -393,6 +426,8 @@ function App() {
               type="text" 
               className="crew-name-input-wide" 
               value={userName} 
+              onFocus={() => setIsTyping(true)}
+              onBlur={() => setIsTyping(false)}
               onChange={(e) => setUserName(e.target.value)} 
               placeholder={t.namePlaceholder}
             />
@@ -402,15 +437,15 @@ function App() {
             <div className="login-left-box">
               <label className="field-lbl">🚊 担当職種選択</label>
               {!isAdminUnlocked ? (
-                <button className="role-select-card-wide active">
+                <button className="role-select-card-wide active" type="button">
                   🚊 {t.driver} (常時解放ルート)
                 </button>
               ) : (
                 <div className="admin-unlocked-menu-list">
                   <div className="admin-badge-txt">🔓 ADMIN FULL ACCESS ACTIVE</div>
-                  <button className={`role-select-card-wide ${selectedRole === 'driver' ? 'active' : ''}`} onClick={() => setSelectedRole('driver')}>🚊 {t.driver}</button>
-                  <button className={`role-select-card-wide ${selectedRole === 'signal' ? 'active' : ''}`} onClick={() => setSelectedRole('signal')}>🚨 {t.signal}</button>
-                  <button className={`role-select-card-wide ${selectedRole === 'dispatcher' ? 'active' : ''}`} onClick={() => setSelectedRole('dispatcher')}>📞 {t.dispatcher}</button>
+                  <button className={`role-select-card-wide ${selectedRole === 'driver' ? 'active' : ''}`} type="button" onClick={() => setSelectedRole('driver')}>🚊 {t.driver}</button>
+                  <button className={`role-select-card-wide ${selectedRole === 'signal' ? 'active' : ''}`} type="button" onClick={() => setSelectedRole('signal')}>🚨 {t.signal}</button>
+                  <button className={`role-select-card-wide ${selectedRole === 'dispatcher' ? 'active' : ''}`} type="button" onClick={() => setSelectedRole('dispatcher')}>📞 {t.dispatcher}</button>
                 </div>
               )}
             </div>
@@ -421,7 +456,9 @@ function App() {
                 type="password" 
                 className="crew-code-input-wide" 
                 value={authCode} 
-                disabled={isAdminUnlocked} // アドミン選択中だけ入力を一時停止
+                disabled={isAdminUnlocked} 
+                onFocus={() => setIsTyping(true)}
+                onBlur={() => setIsTyping(false)}
                 onChange={(e) => setAuthCode(e.target.value.replace(/[^0-9]/g, ''))} 
                 placeholder={isAdminUnlocked ? "認証パス完了" : t.codePlaceholder}
                 maxLength={8}
@@ -430,14 +467,14 @@ function App() {
             </div>
           </div>
 
-          <button className="btn-action-primary start-duty-btn-wide" onClick={handleLoginSubmit}>
+          <button className="btn-action-primary start-duty-btn-wide" type="button" onClick={handleLoginSubmit}>
             {isAdminUnlocked ? "選択した職種で乗務開始 (ADMIN)" : t.btnLogin}
           </button>
         </div>
 
         <div className="login-footer-info-bar">
           <span>SYSTEM VERSION: {APP_VERSION}</span>
-          <button className="btn-logout-clear" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
+          <button className="btn-logout-clear" type="button" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
         </div>
       </div>
     );
@@ -448,8 +485,8 @@ function App() {
       <header className="app-header">
         <h1>{t.title} <span className="version-badge-tag">{APP_VERSION}</span></h1>
         <div className="header-controls">
-          <button className="icon-btn home-btn" onClick={handleGoHome}>{t.home}</button>
-          <button className="icon-btn" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
+          <button className="icon-btn home-btn" type="button" onClick={handleGoHome}>{t.home}</button>
+          <button className="icon-btn" type="button" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
         </div>
       </header>
 
@@ -468,7 +505,7 @@ function App() {
 
       {showSettings && (
         <div className="settings-overlay">
-          <div className="settings-box">
+          <div className="settings-box" style={{width: '450px'}}>
             <h3>⚙️ {t.settings}</h3>
             <div className="settings-scroll-area">
               <label>{t.themeSelect}</label>
@@ -476,10 +513,26 @@ function App() {
                 <option value="dark">{t.themeDark}</option>
                 <option value="light">{t.themeLight}</option>
               </select>
-              <label>{t.keybindLabel}</label>
-              <button className={`btn-keybind-capture ${isListeningKey ? 'capturing' : ''}`} onClick={() => setIsListeningKey(true)}>
-                {isListeningKey ? "Press any key..." : pttKey}
-              </button>
+              
+              <div style={{border: '1px solid #30363d', padding: '12px', borderRadius: '6px', marginTop: '12px', background: 'rgba(0,0,0,0.2)'}}>
+                <span style={{fontSize: '13px', fontWeight: 'bold', color: '#f9826c'}}>⌨️ 独立PTT送信キー割り当て</span>
+                
+                <label style={{marginTop: '8px'}}>無線① PTTキー (メイン/駅VC)</label>
+                <button type="button" className={`btn-keybind-capture ${activeCaptureCh === 1 ? 'capturing' : ''}`} onClick={() => setActiveCaptureCh(1)}>
+                  {activeCaptureCh === 1 ? "任意のキーを押してください..." : pttKeyCh1}
+                </button>
+
+                <label style={{marginTop: '8px'}}>無線② PTTキー (全線列車無線)</label>
+                <button type="button" className={`btn-keybind-capture ${activeCaptureCh === 2 ? 'capturing' : ''}`} onClick={() => setActiveCaptureCh(2)}>
+                  {activeCaptureCh === 2 ? "任意のキーを押してください..." : pttKeyCh2}
+                </button>
+
+                <label style={{marginTop: '8px'}}>無線③ PTTキー (信号指令連絡波)</label>
+                <button type="button" className={`btn-keybind-capture ${activeCaptureCh === 3 ? 'capturing' : ''}`} onClick={() => setActiveCaptureCh(3)}>
+                  {activeCaptureCh === 3 ? "任意のキーを押してください..." : pttKeyCh3}
+                </button>
+              </div>
+
               <label>{t.audioInputLabel}</label>
               <select value={selectedInput} onChange={(e) => setSelectedInput(e.target.value)} className="lang-select">
                 {audioInputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0,5)}`}</option>)}
@@ -490,126 +543,195 @@ function App() {
               </select>
             </div>
             <hr />
-            <button className="btn-close" onClick={() => { setShowSettings(false); setIsListeningKey(false); }}>X</button>
+            <button className="btn-close" type="button" onClick={() => { setShowSettings(false); setActiveCaptureCh(null); }}>X</button>
           </div>
         </div>
       )}
 
       <div className="main-cockpit-grid">
+        {/* 左側：トリプル交信液晶盤 */}
         <div className="cockpit-left-monitor">
-          <div className="radio-display-lcd">
+          <div className="radio-display-lcd" style={{gap: '8px', padding: '15px'}}>
             <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val val-status ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val role-name-color-lcd">{getRoleText(selectedRole)}</span></div>
             
-            <div className="lcd-line" style={{borderBottom:'none', paddingBottom:'0'}}><span className="lcd-lbl">{t.freqLabel}</span></div>
-            <div className="lcd-line" style={{paddingTop:'0', paddingBottom:'10px'}}><span className="lcd-val green-lcd-text" style={{fontSize:'22px'}}>{currentDisplayLabel}</span></div>
-            
-            <div className="lcd-line line-sub-dashed"><span className="lcd-lbl lbl-sub-orange">{t.subFreqLabel}</span></div>
-            <div className="lcd-line" style={{paddingTop:'0'}}><span className="lcd-val sub-lcd-orange-text">{subDisplayLabel}</span></div>
+            <div>
+              <div className="lcd-line" style={{border: 'none'}}><span className="lcd-lbl">📡 無線① [MAIN CH]:</span></div>
+              <div className="lcd-line" style={{border: 'none', alignItems: 'center'}}>
+                <span className="lcd-val val-mainch" style={{fontSize: '16px', color: muteCh1 ? '#768390' : '#39d353'}}>{muteCh1 ? "--- (MUTE中)" : ch1Label}</span>
+                <button type="button" onClick={() => setMuteCh1(!muteCh1)} style={{padding: '3px 8px', fontSize: '11px', fontWeight: 'bold', background: muteCh1 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>
+                  {muteCh1 ? "🔇 MUTE" : "🔊 ON"}
+                </button>
+              </div>
+              <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh1}] {isTalkingCh1 && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
+            </div>
 
-            <div className="lcd-line line-members-top"><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.signalLabel}</span><span className="lcd-val">{isTalking ? t.tx : isConnected ? t.rx : '---'}</span></div>
+            <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px'}}>
+              <div className="lcd-line" style={{border: 'none'}}><span className="lcd-lbl" style={{color: '#ff9800'}}>📻 無線② [列車無線波]:</span></div>
+              <div className="lcd-line" style={{border: 'none', alignItems: 'center'}}>
+                <span className="lcd-val" style={{fontSize: '14px', color: muteCh2 ? '#768390' : '#ffb74d'}}>{muteCh2 ? "--- (MUTE中)" : ch2Label}</span>
+                <button type="button" onClick={() => setMuteCh2(!muteCh2)} style={{padding: '3px 8px', fontSize: '11px', fontWeight: 'bold', background: muteCh2 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>
+                  {muteCh2 ? "🔇 MUTE" : "🔊 ON"}
+                </button>
+              </div>
+              <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh2}] {isTalkingCh2 && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
+            </div>
+
+            <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px'}}>
+              <div className="lcd-line" style={{border: 'none'}}><span className="lcd-lbl" style={{color: '#00d2ff'}}>📡 無線③ [信号指令連絡波]:</span></div>
+              <div className="lcd-line" style={{border: 'none', alignItems: 'center'}}>
+                <span className="lcd-val" style={{fontSize: '14px', color: muteCh3 ? '#768390' : '#88d8ff'}}>{muteCh3 ? "--- (MUTE中)" : ch3Label}</span>
+                <button type="button" onClick={() => setMuteCh3(!muteCh3)} style={{padding: '3px 8px', fontSize: '11px', fontWeight: 'bold', background: muteCh3 ? '#c0392b' : '#27ae60', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>
+                  {muteCh3 ? "🔇 MUTE" : "🔊 ON"}
+                </button>
+              </div>
+              <div className="lcd-line" style={{fontSize: '11px', color: '#8b949e'}}>PTTキー: [{pttKeyCh3}] {isTalkingCh3 && <span style={{color: '#ff9800', fontWeight: 'bold'}}>【TX中】</span>}</div>
+            </div>
+
+            <div className="lcd-line" style={{borderTop: '2px solid #30363d', paddingTop: '5px'}}><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text" style={{fontSize: '16px'}}>{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
           </div>
 
           {isConnected && (
             <div className="in-call-controls">
-              <div className="ctrl-buttons-row">
-                <button onClick={handleDisconnect} className="btn-cockpit danger">
-                  {t.btnDisconnect}
+              <button onClick={handleDisconnect} className="btn-cockpit danger" type="button">
+                {t.btnDisconnect}
+              </button>
+              
+              <div style={{display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '5px'}}>
+                <button className={`ptt-hardware-button ${isTalkingCh1 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', boxShadow: '0 3px 0 #9e3f03'}} type="button" onMouseDown={() => setIsTalkingCh1(true)} onMouseUp={() => setIsTalkingCh1(false)} onMouseLeave={() => setIsTalkingCh1(false)}>
+                  {isTalkingCh1 ? "✦ 無線① 送話中 ✦" : `① メイン送信 [${pttKeyCh1}]`}
+                </button>
+                <button className={`ptt-hardware-button ${isTalkingCh2 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', background: '#d35400', boxShadow: '0 3px 0 #a04000'}} type="button" onMouseDown={() => setIsTalkingCh2(true)} onMouseUp={() => setIsTalkingCh2(false)} onMouseLeave={() => setIsTalkingCh2(false)}>
+                  {isTalkingCh2 ? "✦ 無線② 送話中 ✦" : `② 列車無線送信 [${pttKeyCh2}]`}
+                </button>
+                <button className={`ptt-hardware-button ${isTalkingCh3 ? 'active' : ''}`} style={{height: '45px', fontSize: '14px', background: '#2980b9', boxShadow: '0 3px 0 #1f618d'}} type="button" onMouseDown={() => setIsTalkingCh3(true)} onMouseUp={() => setIsTalkingCh3(false)} onMouseLeave={() => setIsTalkingCh3(false)}>
+                  {isTalkingCh3 ? "✦ 無線③ 送話中 ✦" : `③ 連絡線送信 [${pttKeyCh3}]`}
                 </button>
               </div>
-              <button 
-                className={`ptt-hardware-button ${isTalking ? 'active' : ''}`}
-                onMouseDown={() => setIsTalking(true)} onMouseUp={() => setIsTalking(false)} onMouseLeave={() => setIsTalking(false)}
-              >
-                {isTalking ? t.pttActive : `${t.pttReady} [${pttKey}]`}
-              </button>
             </div>
           )}
         </div>
 
+        {/* 右操作卓（指令員はONLINE中も隠れないようにレイアウト分離！） */}
         <div className="cockpit-right-panel">
-          {!isConnected ? (
-            <div className="right-panel-scroll-box">
+          
+          {/* 🌟 1. 通常操作画面（未接続時の運転士・信号、または常時表示の指令員接続卓） */}
+          {(!isConnected || selectedRole === 'dispatcher') && (
+            <div className="right-panel-scroll-box" style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+              
+              {/* 【運転士】ch設定 ＋ スクリーンテンキー */}
               {selectedRole === 'driver' && (
                 <div className="sub-panel-card">
                   <h3>🚊 {t.driverPanelTitle}</h3>
                   <p className="help-text">{t.driverInputHelp}</p>
-                  <input type="text" className="freq-digit-input" value={inputFreq} onChange={(e) => setInputFreq(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="例: 15" />
-                  <button className="btn-action-primary" onClick={handleDriverConnect}>{t.btnConnect}</button>
+                  <input type="text" className="freq-digit-input" value={inputFreq} readOnly placeholder="ch番号入力" />
+                  
+                  {/* 📱 運転士用スクリーンテンキーパネル */}
+                  <div className="screen-num-keypad">
+                    {[1,2,3,4,5,6,7,8,9,0,'修正'].map((n) => (
+                      <button key={n} type="button" className={`btn-key-digit ${n === '修正' ? 'btn-key-clear' : ''}`} onClick={() => handleKeypadPress(n)}>{n}</button>
+                    ))}
+                  </div>
+                  <button className="btn-action-primary" style={{marginTop: '15px'}} type="button" onClick={handleDriverConnect}>{t.btnConnect}</button>
                 </div>
               )}
 
+              {/* 【信号係】駅選択 */}
               {selectedRole === 'signal' && (
                 <div className="sub-panel-card">
                   <h3>🚨 {t.signalPanelTitle} (Page {signalPage}/2)</h3>
                   <div className="signal-buttons-grid">
                     {signalPage === 1 ? (
-                      signalStationsPage1.map(st => <button key={st} className="btn-station-select" onClick={() => handleSignalConnect(st)}>🚉 {st}</button>)
+                      signalStationsPage1.map(st => <button key={st} className="btn-station-select" type="button" onClick={() => handleSignalConnect(st)}>🚉 {st}</button>)
                     ) : (
-                      signalStationsPage2.map(st => <button key={st} className="btn-station-select" onClick={() => handleSignalConnect(st)}>🚉 {st}</button>)
+                      signalStationsPage2.map(st => <button key={st} className="btn-station-select" type="button" onClick={() => handleSignalConnect(st)}>🚉 {st}</button>)
                     )}
                   </div>
                   <div className="pager-nav-bar">
-                    <button className="btn-pager" disabled={signalPage === 1} onClick={() => setSignalPage(1)}>◀ Page 1</button>
-                    <button className="btn-pager" disabled={signalPage === 2} onClick={() => setSignalPage(2)}>Page 2 ▶</button>
+                    <button className="btn-pager" disabled={signalPage === 1} type="button" onClick={() => setSignalPage(1)}>◀ Page 1</button>
+                    <button className="btn-pager" disabled={signalPage === 2} type="button" onClick={() => setSignalPage(2)}>Page 2 ▶</button>
                   </div>
                 </div>
               )}
 
+              {/* 📞 【運転指令員専用】接続 ＆ テンキー */}
               {selectedRole === 'dispatcher' && (
-                <>
-                  <div className="sub-panel-card">
-                    <h3>📞 指令無線 統制接続</h3>
-                    <p className="help-text">指令員はボタン一発で「指令専用本線無線」を開くか、任意の運転chを指定して緊急介入できます。</p>
-                    <div style={{display:'flex', gap:'15px', marginBottom:'10px'}}>
-                      <button className="btn-action-primary" style={{background:'#27ae60', boxShadow:'0 4px 0 #1e7e43'}} onClick={handleDispatcherDedicatedConnect}>
-                        📻 指令専用無線ch (111.000MHz) へ接続
-                      </button>
-                    </div>
-                    <div style={{borderTop:'1px solid #30363d', paddingTop:'10px'}}>
-                      <input type="text" className="freq-digit-input" style={{fontSize:'20px', padding:'8px'}} value={inputFreq} onChange={(e) => setInputFreq(e.target.value)} placeholder="他chに割り込む場合はch番号を入力" />
-                      <button className="btn-action-primary" onClick={handleDriverConnect}>指定chへ緊急介入</button>
-                    </div>
-                  </div>
-
-                  <div className="sub-panel-card" style={{marginTop: '10px'}}>
-                    <h3>📝 列車運行通告送信盤</h3>
-                    <p className="help-text">特定の運転台、または「全員」に向けて着発変更通告テキストを一斉送信します。</p>
-                    <div style={{marginBottom: '8px'}}>
-                      <input 
-                        type="text" 
-                        style={{width: '100%', padding: '10px', background: '#010409', color: '#fff', border: '1px solid #30363d', borderRadius: '4px'}} 
-                        value={dispatchTarget} 
-                        onChange={(e) => setDispatchTarget(e.target.value)} 
-                        placeholder="送信先 (例: 1021M、または 全員)"
-                      />
-                    </div>
+                <div className="sub-panel-card">
+                  <h3>📞 指令無線 統制接続卓</h3>
+                  <p className="help-text">指令専用本線波を開くか、テンキーで指定した運転台chへ介入します。</p>
+                  
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'flex-start'}}>
                     <div>
-                      <textarea 
-                        style={{width: '100%', height: '50px', padding: '10px', background: '#010409', color: '#fff', border: '1px solid #30363d', borderRadius: '4px', resize: 'none', fontFamily:'monospace'}} 
-                        value={dispatchMessage} 
-                        onChange={(e) => setDispatchMessage(e.target.value)} 
-                        placeholder="通告内容を入力..."
-                      />
+                      <button className="btn-action-primary" style={{background: isConnected ? '#768390' : '#27ae60', boxShadow: isConnected ? '0 4px 0 #57606a' : '0 4px 0 #1e7e43'}} type="button" disabled={isConnected} onClick={handleDispatcherDedicatedConnect}>
+                        {isConnected ? "📻 指令回線運用中" : "📻 指令無線一斉接続(111.000)"}
+                      </button>
+                      {isConnected && (
+                        <div style={{marginTop: '15px', color: '#56d364', fontWeight: 'bold', fontSize: '14px', textAlign: 'center', background: 'rgba(86,211,100,0.1)', padding: '10px', borderRadius: '6px', border: '1px solid #238636'}}>
+                          🟢 指令波・連絡波 回線開通中<br/>(モニター・通告送信可能)
+                        </div>
+                      )}
                     </div>
-                    <button className="btn-action-primary" style={{marginTop: '8px', padding: '10px', background: '#da5b0b', boxShadow: '0 4px 0 #9e3f03'}} onClick={handleSendNotice}>
-                      ⚡ 通告呼出・一斉送信 ⚡
-                    </button>
+                    
+                    <div style={{borderLeft: '1px solid #30363d', paddingLeft: '20px'}}>
+                      <input type="text" className="freq-digit-input" style={{fontSize: '20px', padding: '8px', marginBottom: '10px'}} value={inputFreq} readOnly placeholder="ch選択" />
+                      <div className="screen-num-keypad" style={{gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px'}}>
+                        {[1,2,3,4,5,6,7,8,9,0,'修正'].map((n) => (
+                          <button key={n} type="button" className="btn-key-digit" style={{padding: '8px 0', fontSize: '14px'}} onClick={() => handleKeypadPress(n)}>{n}</button>
+                        ))}
+                      </div>
+                      <button className="btn-action-primary" style={{marginTop: '10px', padding: '10px', fontSize: '15px'}} type="button" onClick={handleDriverConnect}>指定ch割込接続</button>
+                    </div>
                   </div>
-                </>
+                </div>
               )}
-            </div>
-          ) : (
-            <div className="sub-panel-card active-call-status">
-              <p>🔊 現在、複数無線が同時開通しています。</p>
-              <p style={{color: '#ff9800'}}>👉 【メインCH】と【列車無線】の両方の音声を受信（傍受）しています。</p>
-              <p>左側のPTTスイッチを押すと、ご自身の【メインCH】へ向けて発言できます。</p>
+
             </div>
           )}
 
-          <div className="dispatcher-monitor-board">
+          {/* 🌟 2. 運転士・信号係が無線接続中に表示されるステータスカード */}
+          {isConnected && selectedRole !== 'dispatcher' && (
+            <div className="sub-panel-card active-call-status">
+              <p>🔊 現在、トリプルマルチ無線が同時開通しています。</p>
+              <p style={{color: '#ff9800'}}>👉 各無線の受話ボリューム（ON/MUTE）は左液晶のトグルスイッチでカチカチ切り替えられます。</p>
+              <p>キーボードの [{pttKeyCh1}]、[{pttKeyCh2}]、[{pttKeyCh3}] を使い分けることで、それぞれの無線へ狙って送話できます。</p>
+            </div>
+          )}
+
+          {/* 🌟 3. 【運転指令員専用】接続中だろうと何だろうと「常時出現」する列車通告盤 */}
+          {selectedRole === 'dispatcher' && (
+            <div className="sub-panel-card" style={{marginTop: '0px'}}>
+              <h3>📝 列車運行通告送信盤（常時操作可能）</h3>
+              <p className="help-text">特定の列車番号、または「全員」に向けて着発変更通告テキストを一斉送信します。</p>
+              <div style={{marginBottom: '8px'}}>
+                <input 
+                  type="text" 
+                  style={{width: '100%', padding: '10px', background: '#010409', color: '#fff', border: '1px solid #30363d', borderRadius: '4px', fontSize: '15px'}} 
+                  value={dispatchTarget} 
+                  onFocus={() => setIsTyping(true)}
+                  onBlur={() => setIsTyping(false)}
+                  onChange={(e) => setDispatchTarget(e.target.value)} 
+                  placeholder="送信先を入力 (例: 1021M、または 全員)"
+                />
+              </div>
+              <div>
+                <textarea 
+                  style={{width: '100%', height: '55px', padding: '10px', background: '#010409', color: '#fff', border: '1px solid #30363d', borderRadius: '4px', resize: 'none', fontFamily:'monospace', fontSize: '15px'}} 
+                  value={dispatchMessage} 
+                  onFocus={() => setIsTyping(true)}
+                  onBlur={() => setIsTyping(false)}
+                  onChange={(e) => setDispatchMessage(e.target.value)} 
+                  placeholder="通告内容（例: 館浜駅3番線着発に変更到着後指令連絡）"
+                />
+              </div>
+              <button className="btn-action-primary" style={{marginTop: '8px', padding: '10px', background: '#da5b0b', boxShadow: '0 4px 0 #9e3f03'}} type="button" onClick={handleSendNotice}>
+                ⚡ 通告呼出・一斉送信 ⚡
+              </button>
+            </div>
+          )}
+
+          {/* 🖥️ 全社員共通モニター盤（指令員は接続中も常に見れます） */}
+          <div className="dispatcher-monitor-board" style={{marginTop: '0px'}}>
             <h3>🖥️ {t.dispPanelTitle}</h3>
             <div className="monitor-table-container">
               <table className="monitor-table">
@@ -638,7 +760,7 @@ function App() {
       </div>
 
       <div style={{position: 'absolute', bottom: '8px', right: '15px', zIndex: 5}}>
-        <button className="btn-logout-clear-mini" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
+        <button className="btn-logout-clear-mini" type="button" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
       </div>
     </div>
   );

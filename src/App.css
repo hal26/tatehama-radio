@@ -174,3 +174,53 @@ body {
 .notice-text-content { font-size: 24px; color: #fff; font-weight: bold; line-height: 1.5; white-space: pre-wrap; }
 .btn-notice-confirm { width: 100%; padding: 20px; font-size: 22px; font-weight: bold; color: white; background: #238636; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 5px 0 #1a6528; }
 @keyframes border-blink { from { border-color: #f85149; } to { border-color: #da5b0b; } }
+
+/* --- 📱 画面タッチ式スクリーンテンキー定義 --- */
+.screen-num-keypad {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.btn-key-digit {
+  padding: 12px 0;
+  font-size: 18px;
+  font-weight: bold;
+  background: #21262d;
+  color: #fff;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  transition: 0.1s;
+}
+.theme-light .btn-key-digit {
+  background: #f6f8fa;
+  color: #24292f;
+  border-color: #d0d7de;
+}
+
+.btn-key-digit:hover {
+  background: #30363d;
+  border-color: #8b949e;
+}
+.theme-light .btn-key-digit:hover {
+  background: #eaeef2;
+}
+
+.btn-key-digit:active {
+  background: #161b22;
+  transform: scale(0.95);
+}
+
+.btn-key-clear {
+  background: #a13d2d !important;
+  color: #fff !important;
+  border-color: #c0392b !important;
+  grid-column: span 2; /* 修正ボタンを少し大きく */
+}
+.btn-key-clear:hover {
+  background: #c0392b !important;
+}
