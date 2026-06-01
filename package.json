@@ -1,0 +1,27 @@
+{
+  "name": "radio-vc",
+  "version": "1.0.0",
+  "description": "Railway Style Radio VC Application",
+  "main": "electron/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"Server,Vite,Electron\" -c \"yellow,cyan,green\" \"npm run server\" \"vite\" \"electron .\"",
+    "server": "nodemon server/index.js",
+    "build": "vite build",
+    "dist": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.example.radio-vc",
+    "productName": "RadioVC",
+    "files": [
+      "electron/**/*",
+      "dist/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
