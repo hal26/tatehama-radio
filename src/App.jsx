@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 const socket = io('https://tatehama-radio.onrender.com');
 
 // 🚀 システムバージョン
-const APP_VERSION = "v2.1.1";
+const APP_VERSION = "v2.1.2";
 
 const languages = {
   ja: {
@@ -204,6 +204,7 @@ function App() {
     }
     const trimmedCode = authCode.trim();
 
+    // アドミン解放コード判定
     if (trimmedCode === '88888888') {
       setIsAdminUnlocked(true);
       alert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
@@ -211,6 +212,7 @@ function App() {
       return; 
     }
 
+    // アドミン解放モードで乗務開始
     if (isAdminUnlocked) {
       localStorage.setItem('tatehama_crew_name', userName);
       setIsLoggedIn(true);
@@ -218,6 +220,7 @@ function App() {
       return;
     }
 
+    // 通常コード判定
     let finalRole = 'driver'; 
     if (trimmedCode === '22223333') {
       finalRole = 'signal';
@@ -240,29 +243,41 @@ function App() {
     socket.emit('user-login', { name: userName, role: finalRole });
   };
 
+  // 🔄 右下「全設定クリア（ログアウト）」完全初期化
   const handleClearAllStorage = () => {
-    if (window.confirm("保存されている名前、認証コード、テーマ設定をすべて削除してログアウトしますか？")) {
+    if (window.confirm("保存されている名前、認証コード、テーマ設定をすべて削除して完全にログアウトしますか？")) {
       handleDisconnect();
       stopEmergencyBeep();
       setReceivedNotice(null);
-      localStorage.clear(); 
+      
+      localStorage.clear(); // 保存領域を完全リセット
+      
+      // ✨ フォームを完全にフリーに打ち直せるようすべてのステートをリセット
       setUserName('');
       setAuthCode('');
-      setTheme('dark');
-      setSelectedRole('driver');
       setIsAdminUnlocked(false);
+      setSelectedRole('driver');
       setIsLoggedIn(false);
-      alert("すべての記憶データを消去しました。");
+      setTheme('dark');
+      alert("すべての記憶データを完全に消去しました。再入力が可能です。");
     }
   };
 
+  // 🏠 メイン画面から職種選択（ログイン前）に戻る際のロック解除処理
   const handleGoHome = () => {
     handleDisconnect();
     stopEmergencyBeep();
     setReceivedNotice(null);
-    setIsLoggedIn(false);
+    
+    // ✨【バグ修正】戻った瞬間にアドミンロックなどを完全に解除し、打ち込める状態に戻す
     setIsAdminUnlocked(false); 
-    setAuthCode(localStorage.getItem('tatehama_auth_code') || '');
+    setIsLoggedIn(false);
+    
+    // 保存されているデータを引っ張ってきて再セット
+    const savedName = localStorage.getItem('tatehama_crew_name') || '';
+    const savedCode = localStorage.getItem('tatehama_auth_code') || '';
+    setUserName(savedName);
+    setAuthCode(savedCode);
     setSelectedRole('driver');
   };
 
@@ -406,7 +421,7 @@ function App() {
                 type="password" 
                 className="crew-code-input-wide" 
                 value={authCode} 
-                disabled={isAdminUnlocked} 
+                disabled={isAdminUnlocked} // アドミン選択中だけ入力を一時停止
                 onChange={(e) => setAuthCode(e.target.value.replace(/[^0-9]/g, ''))} 
                 placeholder={isAdminUnlocked ? "認証パス完了" : t.codePlaceholder}
                 maxLength={8}
@@ -484,17 +499,17 @@ function App() {
         <div className="cockpit-left-monitor">
           <div className="radio-display-lcd">
             <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val val-status ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val val-name">{userName}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val val-role">{getRoleText(selectedRole)}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val role-name-color-lcd">{getRoleText(selectedRole)}</span></div>
             
             <div className="lcd-line" style={{borderBottom:'none', paddingBottom:'0'}}><span className="lcd-lbl">{t.freqLabel}</span></div>
-            <div className="lcd-line" style={{paddingTop:'0', paddingBottom:'10px'}}><span className="lcd-val val-mainch">{currentDisplayLabel}</span></div>
+            <div className="lcd-line" style={{paddingTop:'0', paddingBottom:'10px'}}><span className="lcd-val green-lcd-text" style={{fontSize:'22px'}}>{currentDisplayLabel}</span></div>
             
             <div className="lcd-line line-sub-dashed"><span className="lcd-lbl lbl-sub-orange">{t.subFreqLabel}</span></div>
-            <div className="lcd-line" style={{paddingTop:'0'}}><span className="lcd-val val-subch">{subDisplayLabel}</span></div>
+            <div className="lcd-line" style={{paddingTop:'0'}}><span className="lcd-val sub-lcd-orange-text">{subDisplayLabel}</span></div>
 
-            <div className="lcd-line line-members-top"><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val val-members">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.signalLabel}</span><span className="lcd-val val-signal">{isTalking ? t.tx : isConnected ? t.rx : '---'}</span></div>
+            <div className="lcd-line line-members-top"><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.signalLabel}</span><span className="lcd-val">{isTalking ? t.tx : isConnected ? t.rx : '---'}</span></div>
           </div>
 
           {isConnected && (
