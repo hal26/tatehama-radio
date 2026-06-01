@@ -9,50 +9,72 @@ const io = new Server(server, {
 });
 
 const PORT = 3000;
-
-// アクセスブロック（BAN）用の簡易リスト
 const bannedUsers = new Set();
 
+// 接続中ユーザーのリアルタイム位置情報データベース
+const activeUsers = {};
+
 io.on('connection', (socket) => {
-  // ブロックされているIPやIDなら即切断
   if (bannedUsers.has(socket.handshake.address) || bannedUsers.has(socket.id)) {
-    console.log(`ブロック済みのアクセスを拒否: ${socket.id}`);
     socket.disconnect(true);
     return;
   }
 
-  console.log(`ユーザー接続: ${socket.id}`);
+  console.log(`接続: ${socket.id}`);
 
-  // 周波数（ルーム）への参加
-  socket.on('join-frequency', (frequency) => {
+  // 乗務開始（ログイン）情報を受け取る
+  socket.on('user-login', ({ name, role }) => {
+    activeUsers[socket.id] = {
+      id: socket.id,
+      name: name || '名無し乗務員',
+      role: role, // driver, signal, dispatcher
+      location: '未接続'
+    };
+    // 司令画面の更新のために全員へアナウンス
+    sendDispatcherUpdate();
+  });
+
+  // 周波数または信号VCへの接続
+  socket.on('join-frequency', ({ frequency, displayLabel }) => {
     const roomID = `room_${frequency.replace('.', '')}`;
-    
-    Array.from(socket.rooms).forEach(room => {
-      if (room !== socket.id) {
-        socket.leave(room);
-        updateRoomCount(room);
+    const room = io.sockets.adapter.rooms.get(roomID);
+
+    // 💥 【人数制限】5名以上の場合は接続拒否
+    if (room && room.size >= 5) {
+      socket.emit('join-failed', '定員（5名）に達しているため、このVCには入れません。');
+      return;
+    }
+
+    // 既存の部屋を抜ける
+    Array.from(socket.rooms).forEach(r => {
+      if (r !== socket.id) {
+        socket.leave(r);
+        updateRoomCount(r);
       }
     });
 
     socket.join(roomID);
     socket.currentRoom = roomID;
-    socket.frequency = frequency; // 周波数を記憶
+    socket.frequency = frequency;
+
+    // ユーザーの位置情報を更新
+    if (activeUsers[socket.id]) {
+      activeUsers[socket.id].location = displayLabel;
+    }
+
+    socket.emit('join-success', { frequency, displayLabel });
     updateRoomCount(roomID);
+    sendDispatcherUpdate();
   });
 
-  // ⚠️【管理者機能】周波数内の全員に遠隔指令を飛ばす
+  // ⚠️【管理者（司令）指令機能】
   socket.on('admin-command', ({ action, freq }) => {
     const roomID = `room_${freq.replace('.', '')}`;
-    console.log(`[ADMIN COMMAND] 行動: ${action} / 対象周波数: ${freq}`);
-
     if (action === 'KICK') {
-      // その周波数にいる全員を強制切断（スタンドバイに戻す）
       io.to(roomID).emit('admin-force-disconnect');
     } else if (action === 'MUTE') {
-      // その周波数にいる全員のマイクを強制消音
       io.to(roomID).emit('admin-force-mute');
     } else if (action === 'BLOCK') {
-      // 現在その部屋にいる全クライアントの通信を拒否リストへ（擬似BAN）
       const room = io.sockets.adapter.rooms.get(roomID);
       if (room) {
         for (const clientId of room) {
@@ -66,10 +88,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 切断処理（回線切断ボタン）
+  socket.on('leave-frequency', () => {
+    if (socket.currentRoom) {
+      const oldRoom = socket.currentRoom;
+      socket.leave(oldRoom);
+      socket.currentRoom = null;
+      if (activeUsers[socket.id]) {
+        activeUsers[socket.id].location = '未接続';
+      }
+      updateRoomCount(oldRoom);
+      sendDispatcherUpdate();
+    }
+  });
+
   socket.on('disconnect', () => {
+    delete activeUsers[socket.id];
     if (socket.currentRoom) {
       updateRoomCount(socket.currentRoom);
     }
+    sendDispatcherUpdate();
   });
 });
 
@@ -79,6 +117,11 @@ function updateRoomCount(roomID) {
   io.to(roomID).emit('room-count-update', count);
 }
 
+// 司令用の一覧データを全クライアント（特に司令）に同期
+function sendDispatcherUpdate() {
+  io.emit('dispatcher-monitor-data', Object.values(activeUsers));
+}
+
 server.listen(PORT, () => {
-  console.log(`サーバーがポート ${PORT} で起動しました。`);
+  console.log(`鉄道無線サーバー起動 ポート: ${PORT}`);
 });
