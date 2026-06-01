@@ -16,8 +16,12 @@
       "electron/**/*",
       "dist/**/*"
     ],
-    "directories": { "output": "release" },
-    "win": { "target": "nsis" }
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "portable"
+    }
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",
