@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 const socket = io('https://tatehama-radio.onrender.com');
 
 // 🚀 システムバージョン
-const APP_VERSION = "v2.1.0";
+const APP_VERSION = "v2.1.1";
 
 const languages = {
   ja: {
@@ -54,11 +54,10 @@ const signalStationsPage2 = ["大道寺", "藤江", "水越", "高見沢", "日�
 
 function App() {
   const [lang, setLang] = useState('ja');
-  // 🎨 テーマ設定を記憶から読み込む
   const [theme, setTheme] = useState(() => localStorage.getItem('tatehama_theme') || 'dark');
   const t = languages[lang];
 
-  // ログイン・認証管理（名前、コードをどちらもlocalStorageから自動復元）
+  // ログイン・認証管理
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState(() => localStorage.getItem('tatehama_crew_name') || '');
   const [authCode, setAuthCode] = useState(() => localStorage.getItem('tatehama_auth_code') || ''); 
@@ -91,7 +90,6 @@ function App() {
   const [receivedNotice, setReceivedNotice] = useState(null);
   const audioIntervalRef = useRef(null);
 
-  // テーマが切り替わったらlocalStorageに保存する
   useEffect(() => {
     localStorage.setItem('tatehama_theme', theme);
   }, [theme]);
@@ -209,7 +207,6 @@ function App() {
     if (trimmedCode === '88888888') {
       setIsAdminUnlocked(true);
       alert("🔓 管理者認証成功：全職種選択ボタンが解放されました。");
-      // 管理者コード自体は保存せずクリア
       setAuthCode(''); 
       return; 
     }
@@ -225,16 +222,15 @@ function App() {
     if (trimmedCode === '22223333') {
       finalRole = 'signal';
       alert("🚨 信号係として認証されました。");
-      localStorage.setItem('tatehama_auth_code', trimmedCode); // コードをPCに記憶
+      localStorage.setItem('tatehama_auth_code', trimmedCode); 
     } else if (trimmedCode === '44445555') {
       finalRole = 'dispatcher';
       alert("📞 運転指令員として認証されました。");
-      localStorage.setItem('tatehama_auth_code', trimmedCode); // コードをPCに記憶
+      localStorage.setItem('tatehama_auth_code', trimmedCode); 
     } else if (trimmedCode !== '') {
       alert("❌ 認証コードが正しくありません。");
       return;
     } else {
-      // 空欄の場合はコード記憶を消去（運転士リセット）
       localStorage.removeItem('tatehama_auth_code');
     }
 
@@ -244,13 +240,12 @@ function App() {
     socket.emit('user-login', { name: userName, role: finalRole });
   };
 
-  // 🔄 画面内の右下「全設定ログアウト」を押した時の処理
   const handleClearAllStorage = () => {
     if (window.confirm("保存されている名前、認証コード、テーマ設定をすべて削除してログアウトしますか？")) {
       handleDisconnect();
       stopEmergencyBeep();
       setReceivedNotice(null);
-      localStorage.clear(); // PCの記憶を全消去
+      localStorage.clear(); 
       setUserName('');
       setAuthCode('');
       setTheme('dark');
@@ -267,12 +262,10 @@ function App() {
     setReceivedNotice(null);
     setIsLoggedIn(false);
     setIsAdminUnlocked(false); 
-    // ホームに戻る時は、通常コード記憶から再読込
     setAuthCode(localStorage.getItem('tatehama_auth_code') || '');
     setSelectedRole('driver');
   };
 
-  // 運転士接続
   const handleDriverConnect = () => {
     let targetFreq = inputFreq.trim();
     let mainLabel = "";
@@ -296,7 +289,6 @@ function App() {
     setIsConnected(true);
   };
 
-  // 指令員接続
   const handleDispatcherDedicatedConnect = () => {
     socket.emit('join-frequency', { 
       frequency: '111.000', 
@@ -307,7 +299,6 @@ function App() {
     setIsConnected(true);
   };
 
-  // 信号係接続
   const handleSignalConnect = (stationName) => {
     const freqCode = `sig_${stationName}`;
     const mainLabel = `信号所内連絡VC [${stationName}駅]`;
@@ -356,12 +347,10 @@ function App() {
     return t.dispatcher;
   };
 
-  // 🛑 ログイン画面（ワイド表示＆コード自動復元対応）
   if (!isLoggedIn) {
     return (
       <div className={`app-container theme-${theme} login-screen-page-wrapper`}>
-        {/* 画面右上：ログイン前でも色反転設定をいじれるように設置 */}
-        <div style={{position: 'absolute', top: '20px', right: '30px', zindex: 10}}>
+        <div style={{position: 'absolute', top: '20px', right: '30px', zIndex: 10}}>
           <button className="icon-btn" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
         </div>
 
@@ -395,7 +384,6 @@ function App() {
           </div>
 
           <div className="login-grid-two-column">
-            {/* 左側：職種メニュー */}
             <div className="login-left-box">
               <label className="field-lbl">🚊 担当職種選択</label>
               {!isAdminUnlocked ? (
@@ -412,7 +400,6 @@ function App() {
               )}
             </div>
 
-            {/* 右側：コード入力 */}
             <div className="login-right-box">
               <label className="field-lbl">🔒 特務認証コード（保存されます）</label>
               <input 
@@ -433,7 +420,6 @@ function App() {
           </button>
         </div>
 
-        {/* ⚙️ 下部システム情報エリア */}
         <div className="login-footer-info-bar">
           <span>SYSTEM VERSION: {APP_VERSION}</span>
           <button className="btn-logout-clear" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
@@ -442,7 +428,6 @@ function App() {
     );
   }
 
-  // 無線機メイン画面
   return (
     <div className={`app-container theme-${theme}`}>
       <header className="app-header">
@@ -498,18 +483,18 @@ function App() {
       <div className="main-cockpit-grid">
         <div className="cockpit-left-monitor">
           <div className="radio-display-lcd">
-            <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val role-name-color-lcd">{getRoleText(selectedRole)}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val val-status ${isConnected ? 'on' : 'off'}`}>{isConnected ? t.online : t.standby}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val val-name">{userName}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val val-role">{getRoleText(selectedRole)}</span></div>
             
             <div className="lcd-line" style={{borderBottom:'none', paddingBottom:'0'}}><span className="lcd-lbl">{t.freqLabel}</span></div>
-            <div className="lcd-line" style={{paddingTop:'0', paddingBottom:'10px'}}><span className="lcd-val green-lcd-text" style={{fontSize:'22px'}}>{currentDisplayLabel}</span></div>
+            <div className="lcd-line" style={{paddingTop:'0', paddingBottom:'10px'}}><span className="lcd-val val-mainch">{currentDisplayLabel}</span></div>
             
-            <div className="lcd-line" style={{borderBottom:'none', paddingBottom:'0', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop:'8px'}}><span className="lcd-lbl" style={{color: '#ff9800'}}>{t.subFreqLabel}</span></div>
-            <div className="lcd-line" style={{paddingTop:'0'}}><span className="lcd-val sub-lcd-orange-text">{subDisplayLabel}</span></div>
+            <div className="lcd-line line-sub-dashed"><span className="lcd-lbl lbl-sub-orange">{t.subFreqLabel}</span></div>
+            <div className="lcd-line" style={{paddingTop:'0'}}><span className="lcd-val val-subch">{subDisplayLabel}</span></div>
 
-            <div className="lcd-line" style={{borderTop: '2px solid #30363d', paddingTop: '8px'}}><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
-            <div className="lcd-line"><span className="lcd-lbl">{t.signalLabel}</span><span className="lcd-val">{isTalking ? t.tx : isConnected ? t.rx : '---'}</span></div>
+            <div className="lcd-line line-members-top"><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val val-members">{isConnected ? `${connectedCount} / 5 名` : '---'}</span></div>
+            <div className="lcd-line"><span className="lcd-lbl">{t.signalLabel}</span><span className="lcd-val val-signal">{isTalking ? t.tx : isConnected ? t.rx : '---'}</span></div>
           </div>
 
           {isConnected && (
@@ -637,7 +622,6 @@ function App() {
         </div>
       </div>
 
-      {/* ⚙️ メイン画面右下のログアウト配置 */}
       <div style={{position: 'absolute', bottom: '8px', right: '15px', zIndex: 5}}>
         <button className="btn-logout-clear-mini" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
       </div>

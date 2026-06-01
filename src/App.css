@@ -1,4 +1,4 @@
-/* --- 1920x1080 館浜電鉄 運行管理卓専用CSS (Version 2.1.0) --- */
+/* --- 1920x1080 館浜電鉄 運行管理卓専用CSS (Version 2.1.1) --- */
 body { 
   margin: 0; 
   font-family: monospace, sans-serif; 
@@ -17,48 +17,69 @@ body {
   position: relative;
 }
 
-/* 🌙 ダークテーマ */
+/* 🌙 ダークテーマ用カラー定義 */
 .theme-dark { background-color: #0d1117 !important; color: #c9d1d9 !important; }
 .theme-dark .icon-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
 .theme-dark .sub-panel-card { background: #161b22 !important; border: 2px solid #30363d; }
 .theme-dark .crew-name-input-wide, .theme-dark .crew-code-input-wide, .theme-dark .freq-digit-input { background: #010409; color: #fff; border: 2px solid #30363d; }
 .theme-dark .radio-display-lcd { background-color: #050c06 !important; border: 4px solid #444c56; box-shadow: inset 0 0 15px rgba(0,0,0,0.9); }
-.theme-dark .lcd-line { border-bottom: 1px dashed rgba(255,255,255,0.08); color: #fff; }
-.theme-dark .role-name-color-lcd { color: #00d2ff; }
-.theme-dark .sub-lcd-orange-text { color: #ffb74d; }
+.theme-dark .lcd-line { border-bottom: 1px dashed rgba(255,255,255,0.08); color: #ffffff; }
+.theme-dark .lcd-lbl { color: #57ab5a; }
+.theme-dark .val-status.on { color: #56d364; text-shadow: 0 0 8px rgba(86,211,100,0.4); }
+.theme-dark .val-status.off { color: #768390; }
+.theme-dark .val-name { color: #e3b341; }
+.theme-dark .val-role { color: #00d2ff; }
+.theme-dark .val-mainch { color: #39d353; text-shadow: 0 0 10px rgba(57,211,83,0.5); }
+.theme-dark .val-subch { color: #ffb74d; }
+.theme-dark .val-members { color: #39d353; }
+.theme-dark .val-signal { color: #ffffff; }
+.theme-dark .line-sub-dashed { border-bottom: none; border-top: 1px dashed rgba(255,255,255,0.1); }
+.theme-dark .line-members-top { border-top: 2px solid #30363d; }
+.theme-dark .lbl-sub-orange { color: #ff9800; }
 .theme-dark .monitor-table th { background: #21262d; color: #8b949e; }
 .theme-dark .monitor-table td { border-bottom: 1px solid #30363d; color: #fff; }
 
-/* ☀️ ライトテーマ（白黒完全反転） */
+/* ☀️ ライトテーマ用カラー定義（白黒文字反転・バグ完全修復） */
 .theme-light { background-color: #f6f8fa !important; color: #24292f !important; }
 .theme-light .app-header h1 { color: #d35400; }
 .theme-light .icon-btn { background: #ffffff; color: #24292f; border: 1px solid #d0d7de; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 .theme-light .sub-panel-card { background: #ffffff !important; border: 2px solid #d0d7de; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 .theme-light .crew-name-input-wide, .theme-light .crew-code-input-wide, .theme-light .freq-digit-input { background: #ffffff; color: #24292f; border: 2px solid #d0d7de; }
-.theme-light .radio-display-lcd { background-color: #eef3f0 !important; border: 4px solid #8c959f; box-shadow: inset 0 0 15px rgba(0,0,0,0.1); }
-.theme-light .lcd-line { border-bottom: 1px dashed rgba(0,0,0,0.12); color: #24292f; }
-.theme-light .lcd-lbl { color: #196f3d; }
-.theme-light .green-lcd-text { color: #1a7f37 !important; text-shadow: none; }
-.theme-light .role-name-color-lcd { color: #0066cc; }
-.theme-light .sub-lcd-orange-text { color: #b76200; }
 .theme-light .monitor-table th { background: #eaeef2; color: #57606a; }
 .theme-light .monitor-table td { border-bottom: 1px solid #d0d7de; color: #24292f; }
 .theme-light .loc-text { color: #1a7f37; }
 .theme-light .login-card-panel { background: #ffffff; border: 2px solid #d0d7de; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
 .theme-light .role-select-card-wide { background: #f6f8fa; color: #24292f; border: 2px solid #d0d7de; }
+.theme-light .role-select-card-wide.active { background: #fff5f2; border-color: #f9826c; color: #f9826c; }
+
+/* 🚨 ライトテーマ時のLCD画面内テキストカラー強制黒・濃色化 */
+.theme-light .radio-display-lcd { background-color: #eef3f0 !important; border: 4px solid #8c959f; box-shadow: inset 0 0 15px rgba(0,0,0,0.1); }
+.theme-light .lcd-line { border-bottom: 1px dashed rgba(0,0,0,0.15); color: #1f2328 !important; }
+.theme-light .lcd-lbl { color: #196f3d !important; }
+.theme-light .val-status.on { color: #1a7f37 !important; text-shadow: none !important; }
+.theme-light .val-status.off { color: #57606a !important; }
+.theme-light .val-name { color: #b07d00 !important; }
+.theme-light .val-role { color: #0969da !important; }
+.theme-light .val-mainch { color: #1a7f37 !important; text-shadow: none !important; }
+.theme-light .val-subch { color: #a04e00 !important; }
+.theme-light .val-members { color: #1a7f37 !important; }
+.theme-light .val-signal { color: #1f2328 !important; }
+.theme-light .line-sub-dashed { border-bottom: none; border-top: 1px dashed rgba(0,0,0,0.15); }
+.theme-light .line-members-top { border-top: 2px solid #d0d7de; }
+.theme-light .lbl-sub-orange { color: #b76200 !important; }
 
 /* ヘッダー */
 .app-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #30363d; padding-bottom: 12px; margin-bottom: 20px; height: 50px; }
 .theme-light .app-header { border-bottom-color: #d0d7de; }
 .app-header h1 { font-size: 26px; margin: 0; color: #f9826c; font-weight: bold; letter-spacing: 2px; }
-.version-badge-tag { font-size: 14px; vertical-align: middle; background: #21262d; padding: 3px 8px; border-radius: 4px; color: #8b949e; marginLeft: '10px'; font-family: monospace; }
+.version-badge-tag { font-size: 14px; vertical-align: middle; background: #21262d; padding: 3px 8px; border-radius: 4px; color: #8b949e; margin-left: 10px; font-family: monospace; }
 .theme-light .version-badge-tag { background: #eaeef2; color: #57606a; }
 .header-controls { display: flex; gap: 12px; }
 .icon-btn { font-size: 14px; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
 .home-btn { background-color: #1f6feb !important; color: white !important; border: none !important; }
 
-/* 🪐 1080p対応：横幅いっぱいに広がる超ワイドログインUI */
-.login-screen-page-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1; width: 100vw; height: 100vh; }
+/* 🪐 ログインUI */
+.login-screen-page-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1; width: 100vw; height: 100vh; position: relative; }
 .login-card-panel { width: 90%; max-width: 1000px; background: #161b22; border: 2px solid #30363d; border-radius: 12px; padding: 40px; box-sizing: border-box; }
 .login-card-panel h2 { font-size: 28px; text-align: center; margin-top: 0; margin-bottom: 30px; letter-spacing: 1px; }
 
@@ -72,7 +93,6 @@ body {
 .login-left-box, .login-right-box { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .role-select-card-wide { width: 100%; height: 60px; background: #21262d; border: 2px solid transparent; color: white; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; text-align: center; transition: 0.15s; }
 .role-select-card-wide.active { border-color: #f9826c; background: #161b22; box-shadow: 0 0 15px rgba(249,130,108,0.25); }
-.theme-light .role-select-card-wide.active { background: #fff5f2; border-color: #f9826c; color: #f9826c; }
 
 .admin-unlocked-menu-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .admin-badge-txt { color: #56d364; font-size: 13px; font-weight: bold; text-align: center; }
@@ -86,22 +106,19 @@ body {
 /* フッター情報バー */
 .login-footer-info-bar { position: absolute; bottom: 15px; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; font-size: 13px; color: #8b949e; align-items: center; }
 .btn-logout-clear { background: #f85149; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; }
-.btn-logout-clear-mini { background: rgba(248,81,73,0.2); color: #ff7b72; border: 1px solid rgba(248,81,73,0.4); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; }
+.btn-logout-clear-mini { background: rgba(248,81,73,0.15); color: #ff7b72; border: 1px solid rgba(248,81,73,0.4); padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; transition: 0.1s; }
 .theme-light .btn-logout-clear-mini { background: #fdf2f2; color: #f85149; border-color: #f85149; }
 .btn-logout-clear:hover, .btn-logout-clear-mini:hover { opacity: 0.8; }
 
 /* 🎛️ 左右分割コクピットレイアウト */
 .main-cockpit-grid { display: grid; grid-template-columns: 480px 1fr; gap: 25px; flex-grow: 1; height: calc(100vh - 110px); overflow: hidden; }
 .cockpit-left-monitor { display: flex; flex-direction: column; gap: 15px; height: 100%; }
-.radio-display-lcd { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.radio-display-lcd { padding: 20px; display: flex; flex-direction: column; gap: 12px; border-radius: 8px; }
 .lcd-line { display: flex; justify-content: space-between; font-size: 15px; padding-bottom: 4px; }
-.lcd-lbl { color: #57ab5a; font-weight: bold; }
+.lcd-lbl { font-weight: bold; }
 .lcd-val { font-weight: bold; }
-.lcd-val.on { color: #56d364; text-shadow: 0 0 8px rgba(86,211,100,0.4); }
-.lcd-val.off { color: #768390; }
-.highlights { color: #e3b341; }
-.big-lcd-line { flex-direction: column; gap: 8px; padding: 12px 0; border-top: 2px solid #30363d; border-bottom: 2px solid #30363d; }
-.green-lcd-text { font-size: 26px; color: #39d353; text-shadow: 0 0 10px rgba(57,211,83,0.5); font-weight: bold; }
+.green-lcd-text { font-size: 26px; font-weight: bold; }
+.val-mainch { font-size: 24px; font-weight: bold; }
 
 /* 送話ボタン */
 .in-call-controls { display: flex; flex-direction: column; gap: 12px; margin-top: auto; }
