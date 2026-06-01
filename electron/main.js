@@ -1,33 +1,39 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Menu } = require('electron');
 const path = require('path');
 
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 420,
-    height: 650,
-    title: "館浜電鉄無線交信部",
-    resizable: false, // 画面サイズを固定して無線機っぽさを出します
+  const mainWindow = new BrowserWindow({
+    width: 1920,        // ➔ 横幅を1920に拡大
+    height: 1080,       // ➔ 縦幅を1080に拡大
+    minWidth: 1024,
+    minHeight: 768,
+    useContentSize: true,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
 
-  // 先ほど build に成功した「dist/index.html」を直接読み込みます
-  win.loadFile(path.join(__dirname, '../dist/index.html'));
+  // 枠の上の「File, Edit, View」などのメニューバーを完全に削除
+  Menu.setApplicationMenu(null);
 
-  // デバッグしたい時だけ下の行のコメントアウト（//）を消してください
-  // win.webContents.openDevTools();
+  // 開発環境と本番環境で読み込み元を切り替え
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.loadURL('http://localhost:5173');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
 }
 
 app.whenReady().then(() => {
   createWindow();
 
-  app.on('activate', () => {
+  app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
 });
