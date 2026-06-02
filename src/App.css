@@ -411,3 +411,79 @@ body {
   50% { opacity: 1; }
   100% { opacity: 0.3; }
 }
+
+/* 🚨 信号係専用 Wスプリットグリッド構造 */
+.signal-split-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2列で並べる */
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.station-split-row-block {
+  display: flex;
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+/* 左側：①構内VCボタン */
+.btn-station-part-left {
+  flex: 1.3; /* 駅名側を少し広めに */
+  padding: 12px 6px;
+  font-size: 13px;
+  font-weight: bold;
+  background: #21262d;
+  color: #58a6ff;
+  border: 1px solid #30363d;
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.1s;
+}
+.btn-station-part-left:hover {
+  background: #30363d;
+  color: #79c0ff;
+}
+.btn-station-part-left:active {
+  background: #161b22;
+}
+
+/* 右側：④閉塞連絡ボタン */
+.btn-station-part-right {
+  flex: 0.8; /* 閉塞側はコンパクトに */
+  padding: 12px 4px;
+  font-size: 11px;
+  font-weight: bold;
+  background: #2d1e20;
+  color: #ff7b72;
+  border: 1px solid #442326;
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.1s;
+}
+.btn-station-part-right:hover {
+  background: #4c282c;
+  color: #ffa198;
+}
+.btn-station-part-right:active {
+  background: #1f1012;
+}
+
+/* ライトテーマ用のカラーアジャスト */
+.theme-light .btn-station-part-left {
+  background: #f6f8fa;
+  color: #0969da;
+  border-color: #d0d7de;
+}
+.theme-light .btn-station-part-left:hover { background: #eaeef2; }
+.theme-light .btn-station-part-right {
+  background: #fff0f0;
+  color: #cf222e;
+  border-color: #f1aeb5;
+}
+.theme-light .btn-station-part-right:hover { background: #ffe3e3; }
