@@ -3,8 +3,8 @@ import { io } from 'socket.io-client';
 
 const socket = io('https://tatehama-radio.onrender.com');
 
-// 🚀 v3.2.0-3.2.5: サーバー通信状態ランプ新設 ＆ 信号係Wボタン化（①構内VC／④閉塞VCを個別アサイン可能）
-const APP_VERSION = "v3.2.5";
+// 🚀 v3.3.0: 設定ボタン完全復活 ＆ 5色カラーバリエーション（黒、白、青、緑、赤）完全実装！
+const APP_VERSION = "v3.3.0";
 
 const languages = {
   ja: {
@@ -18,8 +18,12 @@ const languages = {
     btnDisconnect: "全回線切断 (右クリックで個別切断)",
     settings: "設定",
     home: "🏠 職種選択に戻る",
+    themeSelect: "画面カラーバリエーション",
     themeDark: "黒ベース (Dark)",
     themeLight: "白ベース (Light)",
+    themeBlue: "青ベース (Blue)",
+    themeGreen: "緑ベース (Green)",
+    themeRed: "赤ベース (Red)",
     loginTitle: "乗務員登録 ＆ 職種認証ログイン",
     namePlaceholder: "乗務員名を入力してください",
     codePlaceholder: "特務認証コード入力 (8桁)",
@@ -30,6 +34,7 @@ const languages = {
     driverInputHelp: "テンキーでch番号を入力し、下のボタンで個別に開通させます（定員10名）",
     signalPanelTitle: "🚨 信号所 独立回線開通・連動選択盤",
     dispPanelTitle: "無線通信・社員配置モニター盤",
+    btnClearAuth: "⚠️ 全設定クリア（ログアウト）"
   }
 };
 
@@ -38,13 +43,15 @@ const signalStationsPage2 = ["大道寺", "藤江", "水越", "高見沢", "日�
 
 function App() {
   const [lang, setLang] = useState('ja');
+  
+  // 🎨 テーマの初期化（5色対応：dark, light, blue, green, red）
   const [theme, setTheme] = useState(() => localStorage.getItem('tatehama_theme') || 'dark');
   const t = languages[lang];
 
   // 🌐 サーバーのオンライン/オフライン状態
   const [isServerOnline, setIsServerOnline] = useState(false);
 
-  // ログイン・認証
+  // ログイン・認証管理
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState(() => localStorage.getItem('tatehama_crew_name') || '');
   const [authCode, setAuthCode] = useState(() => localStorage.getItem('tatehama_auth_code') || ''); 
@@ -105,6 +112,8 @@ function App() {
   const [pttKeyCh4, setPttKeyCh4] = useState('KeyN'); 
   
   const [activeCaptureCh, setActiveCaptureCh] = useState(null); 
+  
+  // 🎯 設定パネルの表示フラグ
   const [showSettings, setShowSettings] = useState(false);
 
   const [isTyping, setIsTyping] = useState(false);
@@ -118,6 +127,7 @@ function App() {
   // 全体接続ステート
   const isConnected = isCh1Active || isCh2Active || isCh3Active || isCh4Active;
 
+  // テーマ切り替え時にローカルストレージへ保存
   useEffect(() => {
     localStorage.setItem('tatehama_theme', theme);
   }, [theme]);
@@ -285,7 +295,6 @@ function App() {
     setSelectedRole('driver');
   };
 
-  // 無線① 接続処理 (運転士・指令)
   const connectChannel1 = () => {
     const chNum = parseInt(inputFreq.trim(), 10);
     if (isNaN(chNum) || chNum < 1 || chNum > 80) {
@@ -296,52 +305,38 @@ function App() {
     }
     const targetFreq = `111.${100 + chNum}`;
     socket.emit('join-frequency', { frequency: targetFreq, displayLabel: `🚊 ${chNum}ch列車無線` });
-    
     setCh1Label(`${chNum}ch 本線波 (${targetFreq} MHz)`);
-    setIsCh1Active(true);
-    setCodeError('');
+    setIsCh1Active(true); setCodeError('');
   };
 
   const connectChannel2 = () => {
     socket.emit('join-frequency', { frequency: '111.000', displayLabel: '全線列車共通受令波' });
     setCh2Label("111.000 MHz (列車共通波)");
-    setIsCh2Active(true);
-    setCodeError('');
+    setIsCh2Active(true); setCodeError('');
   };
 
   const connectChannel3 = () => {
     if (selectedRole === 'driver') return; 
-    if (countCh3 >= limitCh3) {
-      setCodeError(`❌ 無線③は満員（${limitCh3}名）です。`); return;
-    }
+    if (countCh3 >= limitCh3) { setCodeError(`❌ 無線③は満員（${limitCh3}名）です。`); return; }
     socket.emit('join-frequency', { frequency: '111.900', displayLabel: '信号指令連絡波' });
     setCh3Label("111.900 MHz (信号指令連絡波)");
-    setIsCh3Active(true);
-    setCodeError('');
+    setIsCh3Active(true); setCodeError('');
   };
 
-  // 🎯 【おすすめ進化】信号係：選択された駅を「無線① (信号場内連絡VC)」として独立投入
   const handleSignalStationConnectCh1 = (stationName) => {
-    if (countCh1 >= limitCh1) {
-      setCodeError(`❌ ${stationName}駅VCは満員（${limitCh1}名）です。`); return;
-    }
+    if (countCh1 >= limitCh1) { setCodeError(`❌ ${stationName}駅VCは満員（${limitCh1}名）です。`); return; }
     const freqCode = `sig_ch1_${stationName}`;
     socket.emit('join-frequency', { frequency: freqCode, displayLabel: `信号構内:${stationName}` });
     setCh1Label(`信号所内連絡VC [${stationName}駅]`);
-    setIsCh1Active(true);
-    setCodeError('');
+    setIsCh1Active(true); setCodeError('');
   };
 
-  // 🎯 【おすすめ進化】信号係：選択された駅を「無線④ (隣駅閉塞連絡波)」として独立投入
   const handleSignalStationConnectCh4 = (stationName) => {
-    if (countCh4 >= limitCh4) {
-      setCodeError(`❌ ${stationName}閉塞回線は満員（${limitCh4}名）です。`); return;
-    }
+    if (countCh4 >= limitCh4) { setCodeError(`❌ ${stationName}閉責回線は満員（${limitCh4}名）です。`); return; }
     const freqCode = `sig_ch4_${stationName}`;
     socket.emit('join-frequency', { frequency: freqCode, displayLabel: `閉塞連絡:${stationName}` });
     setCh4Label(`隣駅閉塞連絡波 [${stationName}方面]`);
-    setIsCh4Active(true);
-    setCodeError('');
+    setIsCh4Active(true); setCodeError('');
   };
 
   const handleDisconnectAll = () => {
@@ -379,16 +374,39 @@ function App() {
   const handleConfirmNotice = () => { stopEmergencyBeep(); setReceivedNotice(null); };
   const getRoleText = (r) => { if (r === 'driver') return t.driver; if (r === 'signal') return t.signal; return t.dispatcher; };
 
+  // 🚪 ログイン前の画面
   if (!isLoggedIn) {
     return (
       <div className={`app-container theme-${theme} login-screen-page-wrapper`}>
-        {/* 右上の通信状態モニター */}
+        {/* 右上の通信状態モニター ＆ 設定ボタン（onClick復活！） */}
         <div style={{position: 'absolute', top: '20px', right: '30px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '10px'}}>
           <div className={`server-status-pill ${isServerOnline ? 'online' : 'offline'}`}>
             <span className="dot"></span> {isServerOnline ? "WS ONLINE" : "WS OFFLINE"}
           </div>
-          <button className="icon-btn" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
+          <button className="icon-btn" type="button" onClick={() => setShowSettings(true)}>⚙️ {t.settings}</button>
         </div>
+
+        {/* ⚙️ 設定オーバーレイ（5色マルチバリエーション選択対応） */}
+        {showSettings && (
+          <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+            <div className="settings-box" onClick={(e) => e.stopPropagation()}>
+              <h3>⚙️ システム環境設定</h3>
+              <div style={{marginTop: '15px'}}>
+                <label style={{fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '6px'}}>{t.themeSelect}</label>
+                <select value={theme} onChange={(e) => setTheme(e.target.value)} className="lang-select" style={{width: '100%', padding: '8px', background: '#1f242c', color: '#fff', border: '1px solid #30363d', borderRadius: '4px'}}>
+                  <option value="dark">{t.themeDark}</option>
+                  <option value="light">{t.themeLight}</option>
+                  <option value="blue">{t.themeBlue}</option>
+                  <option value="green">{t.themeGreen}</option>
+                  <option value="red">{t.themeRed}</option>
+                </select>
+              </div>
+              <hr style={{margin: '20px 0', border: 'none', borderTop: '1px solid #30363d'}} />
+              <button className="btn-close-custom-panel" type="button" onClick={() => setShowSettings(false)}>設定を閉じる</button>
+            </div>
+          </div>
+        )}
+
         <div className="login-card-panel">
           <h2>{t.loginTitle}</h2>
           {successMessage && <div className="login-inline-success-box">{successMessage}</div>}
@@ -419,6 +437,7 @@ function App() {
     );
   }
 
+  // 🎛️ ログイン（乗務開始）後のメイン画面
   return (
     <div className={`app-container theme-${theme}`}>
       <header className="app-header">
@@ -428,9 +447,31 @@ function App() {
             <span className="dot"></span> {isServerOnline ? "WS ONLINE" : "WS OFFLINE"}
           </div>
           <button className="icon-btn home-btn" type="button" onClick={handleGoHome}>{t.home}</button>
-          <button className="icon-btn" type="button" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
+          {/* メイン画面側の設定ボタンクリック処理も完全復旧！ */}
+          <button className="icon-btn" type="button" onClick={() => setShowSettings(true)}>⚙️ {t.settings}</button>
         </div>
       </header>
+
+      {/* ⚙️ メイン画面側 設定オーバーレイ */}
+      {showSettings && (
+        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+          <div className="settings-box" onClick={(e) => e.stopPropagation()}>
+            <h3>⚙️ システム環境設定</h3>
+            <div style={{marginTop: '15px'}}>
+              <label style={{fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '6px'}}>{t.themeSelect}</label>
+              <select value={theme} onChange={(e) => setTheme(e.target.value)} className="lang-select" style={{width: '100%', padding: '8px', background: '#1f242c', color: '#fff', border: '1px solid #30363d', borderRadius: '4px'}}>
+                <option value="dark">{t.themeDark}</option>
+                <option value="light">{t.themeLight}</option>
+                <option value="blue">{t.themeBlue}</option>
+                <option value="green">{t.themeGreen}</option>
+                <option value="red">{t.themeRed}</option>
+              </select>
+            </div>
+            <hr style={{margin: '20px 0', border: 'none', borderTop: '1px solid #30363d'}} />
+            <button className="btn-close-custom-panel" type="button" onClick={() => setShowSettings(false)}>設定を閉じる</button>
+          </div>
+        </div>
+      )}
 
       {contextMenu.show && (
         <div className="custom-disconnect-context-menu" style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}>
@@ -566,14 +607,13 @@ function App() {
               </div>
             )}
 
-            {/* 🚨 信号係：駅選択Wスプリットボタン化 */}
+            {/* 信号係 */}
             {selectedRole === 'signal' && (
               <div className="sub-panel-card">
                 <h3>{t.signalPanelTitle} (Page {signalPage}/2)</h3>
-                <p className="help-text" style={{color: '#b34953', fontWeight: 'bold'}}>👉 各駅ボタン内の 左[①開通] で構内VC、右[④閉塞] で隣駅閉塞波に独立リンクします</p>
+                <p className="help-text" style={{color: '#ff7b72', fontWeight: 'bold'}}>👉 各駅ボタンの 左[①開通] で構内VC、右[④閉塞] で隣駅閉塞波に個別リンク</p>
                 {codeError && <div className="inline-red-error-text" style={{margin:'5px 0'}}>{codeError}</div>}
                 
-                {/* 🚉 Wスプリットグリッド */}
                 <div className="signal-split-buttons-grid">
                   {(signalPage === 1 ? signalStationsPage1 : signalStationsPage2).map(st => (
                     <div key={st} className="station-split-row-block">
@@ -592,7 +632,6 @@ function App() {
                   <button type="button" onClick={() => setSignalPage(2)} disabled={signalPage === 2}>Page 2 ▶</button>
                 </div>
                 
-                {/* 共通波・指令連絡波の常設スイッチ */}
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', borderTop: '1px solid #30363d', paddingTop: '10px'}}>
                   <button type="button" className="btn-action-primary" style={{background: isCh2Active ? '#2c3e50' : '#d35400', fontSize:'12px'}} onClick={connectChannel2}>②共通波 接続</button>
                   <button type="button" className="btn-action-primary" style={{background: isCh3Active ? '#2c3e50' : '#2980b9', fontSize:'12px'}} onClick={connectChannel3}>③指令連絡 接続</button>
@@ -622,7 +661,7 @@ function App() {
             {selectedRole === 'dispatcher' && (
               <div className="sub-panel-card" style={{marginTop: '0px'}}>
                 <h3>📝 列車運行通告送信盤</h3>
-                <input type="text" style={{width: '100%', padding: '6px', background: '#010409', color: '#fff', border: '1px solid #30363d'}} value={dispatchTarget} onChange={(e) => setDispatchTarget(e.target.value)} placeholder="送信先" />
+                <input type="text" style={{width: '100%', padding: '6px', background: '#010409', color: '#fff', border: '1px solid #30363d' }} value={dispatchTarget} onChange={(e) => setDispatchTarget(e.target.value)} placeholder="送信先" />
                 <textarea style={{width: '100%', height: '40px', marginTop:'5px', background: '#010409', color: '#fff', border: '1px solid #30363d'}} value={dispatchMessage} onChange={(e) => setDispatchMessage(e.target.value)} placeholder="通告内容" />
                 <button className="btn-action-primary" style={{marginTop: '5px', background: '#da5b0b'}} type="button" onClick={handleSendNotice}>⚡ 通告一斉送信 ⚡</button>
               </div>
@@ -644,6 +683,11 @@ function App() {
 
           </div>
         </div>
+      </div>
+      
+      {/* ⚠️ 全設定クリアフッター */}
+      <div style={{position: 'absolute', bottom: '8px', right: '15px', zIndex: 5}}>
+        <button className="btn-logout-clear-mini" type="button" onClick={handleClearAllStorage}>{t.btnClearAuth}</button>
       </div>
     </div>
   );
