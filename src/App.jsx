@@ -3,8 +3,8 @@ import { io } from 'socket.io-client';
 
 const socket = io('https://tatehama-radio.onrender.com');
 
-// 🚀 v3.1.7: 中国語の誤混入を完全撤去！純国産の日本語仕様に修正
-const APP_VERSION = "v3.1.7";
+// 🚀 v3.2.0: サーバー通信状態ランプ新設 ＆ 信号係4ch化（閉塞連絡波追加）
+const APP_VERSION = "v3.2.0";
 
 const languages = {
   ja: {
@@ -12,30 +12,24 @@ const languages = {
     statusLabel: "STATUS:",
     standby: "STANDBY (未接続)",
     online: "ONLINE (複数波独立リンク中)", 
-    onlineDisp: "ONLINE (指令統制モード)",
     membersLabel: "全乗務員数:",
     roleLabel: "ROLE:",
     userLabel: "NAME:",
     btnDisconnect: "全回線切断 (右クリックで個別切断)",
     settings: "設定",
     home: "🏠 職種選択に戻る",
-    themeSelect: "画面テーマ (Theme)",
     themeDark: "黒ベース (Dark)",
     themeLight: "白ベース (Light)",
-    audioInputLabel: "マイク入力デバイス (🎤)",
-    audioOutputLabel: "スピーカー出力デバイス (🔊)",
     loginTitle: "乗務員登録 ＆ 職種認証ログイン",
     namePlaceholder: "乗務員名を入力してください",
     codePlaceholder: "特務認証コード入力 (8桁)",
     driver: "運転士",
     signal: "信号係",
     dispatcher: "運転指令員",
-    btnLogin: "乗務開始",
     driverPanelTitle: "🚊 運転台列車無線 チャンネル設定",
     driverInputHelp: "テンキーでch番号を入力し、下のボタンで個別に開通させます（定員10名）",
     signalPanelTitle: "🚨 信号所VC 独立受令選択",
     dispPanelTitle: "無線通信・社員配置モニター盤",
-    btnClearAuth: "⚠️ 全設定クリア（ログアウト）"
   }
 };
 
@@ -46,6 +40,9 @@ function App() {
   const [lang, setLang] = useState('ja');
   const [theme, setTheme] = useState(() => localStorage.getItem('tatehama_theme') || 'dark');
   const t = languages[lang];
+
+  // 🌐 サーバーのオンライン/オフライン状態 (Socket.ioの生接続を監視)
+  const [isServerOnline, setIsServerOnline] = useState(false);
 
   // ログイン・認証
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -59,14 +56,16 @@ function App() {
   const [codeError, setCodeError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // 各チャンネルの開通フラグ・ラベル
+  // 📡 各チャンネルの開通フラグ・ラベル
   const [isCh1Active, setIsCh1Active] = useState(false);
   const [isCh2Active, setIsCh2Active] = useState(false);
   const [isCh3Active, setIsCh3Active] = useState(false);
+  const [isCh4Active, setIsCh4Active] = useState(false); // 👈 無線④ (閉塞連絡)
 
   const [ch1Label, setCh1Label] = useState('---');
   const [ch2Label, setCh2Label] = useState('---');
   const [ch3Label, setCh3Label] = useState('---');
+  const [ch4Label, setCh4Label] = useState('---'); // 👈 無線④
 
   const [inputFreq, setInputFreq] = useState('1');
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0 });
@@ -76,11 +75,13 @@ function App() {
   const [countCh1, setCountCh1] = useState(0);
   const [countCh2, setCountCh2] = useState(0);
   const [countCh3, setCountCh3] = useState(0);
+  const [countCh4, setCountCh4] = useState(0); // 👈 無線④
 
   // 定員設定
   const limitCh2 = "制限なし"; 
   const [limitCh1, setLimitCh1] = useState(10); 
   const [limitCh3, setLimitCh3] = useState(10); 
+  const [limitCh4, setLimitCh4] = useState(6);  // 👈 閉塞回線の定員(隣同士想定で少しタイトに)
 
   const [signalPage, setSignalPage] = useState(1);
   const [monitorData, setMonitorData] = useState([]);
@@ -89,23 +90,22 @@ function App() {
   const [muteCh1, setMuteCh1] = useState(false);
   const [muteCh2, setMuteCh2] = useState(false);
   const [muteCh3, setMuteCh3] = useState(false);
+  const [muteCh4, setMuteCh4] = useState(false); // 👈 無線④
 
   // 🎤 PTT送信状態
   const [isTalkingCh1, setIsTalkingCh1] = useState(false);
   const [isTalkingCh2, setIsTalkingCh2] = useState(false);
   const [isTalkingCh3, setIsTalkingCh3] = useState(false);
+  const [isTalkingCh4, setIsTalkingCh4] = useState(false); // 👈 無線④
 
   // ⌨️ キーバインド
   const [pttKeyCh1, setPttKeyCh1] = useState('Space');
   const [pttKeyCh2, setPttKeyCh2] = useState('KeyV');
   const [pttKeyCh3, setPttKeyCh3] = useState('KeyB');
+  const [pttKeyCh4, setPttKeyCh4] = useState('KeyN'); // 👈 無線④は [N] キー
   
   const [activeCaptureCh, setActiveCaptureCh] = useState(null); 
   const [showSettings, setShowSettings] = useState(false);
-  const [audioInputs, setAudioInputs] = useState([]);
-  const [audioOutputs, setAudioOutputs] = useState([]);
-  const [selectedInput, setSelectedInput] = useState('');
-  const [selectedOutput, setSelectedOutput] = useState('');
 
   const [isTyping, setIsTyping] = useState(false);
 
@@ -116,7 +116,7 @@ function App() {
   const audioIntervalRef = useRef(null);
 
   // 全体接続ステート
-  const isConnected = isCh1Active || isCh2Active || isCh3Active;
+  const isConnected = isCh1Active || isCh2Active || isCh3Active || isCh4Active;
 
   useEffect(() => {
     localStorage.setItem('tatehama_theme', theme);
@@ -153,19 +153,21 @@ function App() {
     }
   };
 
+  // 🌐 WebSocketの接続・切断イベントを検知して右上ランプに反映
   useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(() => {
-        navigator.mediaDevices.enumerateDevices().then(devices => {
-          const inputs = devices.filter(d => d.kind === 'audioinput');
-          const outputs = devices.filter(d => d.kind === 'audiooutput');
-          setAudioInputs(inputs);
-          setAudioOutputs(outputs);
-          if (inputs.length > 0) setSelectedInput(inputs[0].deviceId);
-          if (outputs.length > 0) setSelectedOutput(outputs[0].deviceId);
-        });
-      })
-      .catch(err => console.error("デバイス取得失敗:", err));
+    // 初回チェック
+    setIsServerOnline(socket.connected);
+
+    const onConnect = () => setIsServerOnline(true);
+    const onDisconnect = () => setIsServerOnline(false);
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+    };
   }, []);
 
   useEffect(() => {
@@ -175,11 +177,13 @@ function App() {
         setCountCh1(isCh1Active ? (data.ch1 || 1) : 0);
         setCountCh2(isCh2Active ? (data.ch2 || 1) : 0);
         setCountCh3(isCh3Active ? (data.ch3 || 1) : 0);
+        setCountCh4(isCh4Active ? (data.ch4 || 1) : 0);
       } else {
         setGlobalTotalCount(data || 0);
         setCountCh1(isCh1Active ? 1 : 0);
         setCountCh2(isCh2Active ? 1 : 0);
         setCountCh3(isCh3Active ? 1 : 0);
+        setCountCh4(isCh4Active ? 1 : 0);
       }
     });
 
@@ -207,20 +211,11 @@ function App() {
       socket.off('join-success');
       socket.off('receive-dispatcher-notice');
     };
-  }, [userName, isCh1Active, isCh2Active, isCh3Active]);
+  }, [userName, isCh1Active, isCh2Active, isCh3Active, isCh4Active]);
 
   // キーボード PTT制御
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (activeCaptureCh !== null) {
-        e.preventDefault();
-        if (activeCaptureCh === 1) setPttKeyCh1(e.code);
-        if (activeCaptureCh === 2) setPttKeyCh2(e.code);
-        if (activeCaptureCh === 3) setPttKeyCh3(e.code);
-        setActiveCaptureCh(null);
-        return;
-      }
-
       if (isTyping) return;
       if (e.code === 'Space') { e.preventDefault(); }
 
@@ -228,6 +223,7 @@ function App() {
         if (e.code === pttKeyCh1 && isCh1Active) { e.preventDefault(); setIsTalkingCh1(true); }
         if (e.code === pttKeyCh2 && isCh2Active) { e.preventDefault(); setIsTalkingCh2(true); }
         if (e.code === pttKeyCh3 && isCh3Active && selectedRole !== 'driver') { e.preventDefault(); setIsTalkingCh3(true); }
+        if (e.code === pttKeyCh4 && isCh4Active && selectedRole === 'signal') { e.preventDefault(); setIsTalkingCh4(true); }
       }
     };
 
@@ -237,6 +233,7 @@ function App() {
         if (e.code === pttKeyCh1) { e.preventDefault(); setIsTalkingCh1(false); }
         if (e.code === pttKeyCh2) { e.preventDefault(); setIsTalkingCh2(false); }
         if (e.code === pttKeyCh3) { e.preventDefault(); setIsTalkingCh3(false); }
+        if (e.code === pttKeyCh4) { e.preventDefault(); setIsTalkingCh4(false); }
       }
     };
 
@@ -246,7 +243,7 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isLoggedIn, pttKeyCh1, pttKeyCh2, pttKeyCh3, activeCaptureCh, showSettings, isTyping, selectedRole, isCh1Active, isCh2Active, isCh3Active]);
+  }, [isLoggedIn, pttKeyCh1, pttKeyCh2, pttKeyCh3, pttKeyCh4, showSettings, isTyping, selectedRole, isCh1Active, isCh2Active, isCh3Active, isCh4Active]);
 
   const handleLoginSubmit = () => {
     setNameError(''); setCodeError(''); setSuccessMessage('');
@@ -282,12 +279,6 @@ function App() {
     else if (role === 'signal') setLimitCh1(8);
     else if (role === 'dispatcher') setLimitCh1(10);
     setLimitCh3(10);
-  };
-
-  const handleClearAllStorage = () => {
-    handleDisconnectAll(); stopEmergencyBeep(); setReceivedNotice(null);
-    localStorage.clear(); setUserName(''); setAuthCode(''); setIsAdminUnlocked(false);
-    setSelectedRole('driver'); setIsLoggedIn(false); setTheme('dark'); setIsTyping(false);
   };
 
   const handleGoHome = () => {
@@ -332,6 +323,18 @@ function App() {
     setCodeError('');
   };
 
+  // 🔗 【NEW】無線④：隣駅閉塞連絡波の開通処理
+  const connectChannel4 = () => {
+    if (selectedRole !== 'signal') return;
+    if (countCh4 >= limitCh4) {
+      setCodeError(`❌ 閉塞連絡波は満員（${limitCh4}名）です。`); return;
+    }
+    socket.emit('join-frequency', { frequency: '111.400', displayLabel: '隣駅閉塞連絡波' });
+    setCh4Label("111.400 MHz (隣駅閉塞連絡波)");
+    setIsCh4Active(true);
+    setCodeError('');
+  };
+
   const handleSignalStationConnect = (stationName) => {
     if (countCh1 >= limitCh1) {
       setCodeError(`❌ ${stationName}駅VCは満員（${limitCh1}名）です。`); return;
@@ -345,10 +348,10 @@ function App() {
 
   const handleDisconnectAll = () => {
     socket.emit('leave-frequency');
-    setIsCh1Active(false); setIsCh2Active(false); setIsCh3Active(false);
-    setIsTalkingCh1(false); setIsTalkingCh2(false); setIsTalkingCh3(false);
-    setCh1Label('---'); setCh2Label('---'); setCh3Label('---');
-    setCountCh1(0); setCountCh2(0); setCountCh3(0);
+    setIsCh1Active(false); setIsCh2Active(false); setIsCh3Active(false); setIsCh4Active(false);
+    setIsTalkingCh1(false); setIsTalkingCh2(false); setIsTalkingCh3(false); setIsTalkingCh4(false);
+    setCh1Label('---'); setCh2Label('---'); setCh3Label('---'); setCh4Label('---');
+    setCountCh1(0); setCountCh2(0); setCountCh3(0); setCountCh4(0);
   };
 
   const handleDisconnectRightClick = (e) => {
@@ -360,6 +363,7 @@ function App() {
     if (chNum === 1) { setIsCh1Active(false); setCh1Label('---'); setCountCh1(0); setIsTalkingCh1(false); }
     if (chNum === 2) { setIsCh2Active(false); setCh2Label('---'); setCountCh2(0); setIsTalkingCh2(false); }
     if (chNum === 3) { setIsCh3Active(false); setCh3Label('---'); setCountCh3(0); setIsTalkingCh3(false); }
+    if (chNum === 4) { setIsCh4Active(false); setCh4Label('---'); setCountCh4(0); setIsTalkingCh4(false); }
     setContextMenu({ show: false, x: 0, y: 0 });
   };
 
@@ -380,7 +384,11 @@ function App() {
   if (!isLoggedIn) {
     return (
       <div className={`app-container theme-${theme} login-screen-page-wrapper`}>
-        <div style={{position: 'absolute', top: '20px', right: '30px', zIndex: 10}}>
+        {/* 右上の通信状態モニター */}
+        <div style={{position: 'absolute', top: '20px', right: '30px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '10px'}}>
+          <div className={`server-status-pill ${isServerOnline ? 'online' : 'offline'}`}>
+            <span className="dot"></span> {isServerOnline ? "WS ONLINE" : "WS OFFLINE"}
+          </div>
           <button className="icon-btn" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
         </div>
         {showSettings && (
@@ -430,6 +438,10 @@ function App() {
       <header className="app-header">
         <h1>{t.title} <span className="version-badge-tag">{APP_VERSION}</span></h1>
         <div className="header-controls">
+          {/* 右上の通信状態モニター */}
+          <div className={`server-status-pill ${isServerOnline ? 'online' : 'offline'}`}>
+            <span className="dot"></span> {isServerOnline ? "WS ONLINE" : "WS OFFLINE"}
+          </div>
           <button className="icon-btn home-btn" type="button" onClick={handleGoHome}>{t.home}</button>
           <button className="icon-btn" type="button" onClick={() => setShowSettings(!showSettings)}>⚙️ {t.settings}</button>
         </div>
@@ -440,7 +452,8 @@ function App() {
           <div className="menu-header-title">独立回線切断選択 (右クリックメニュー)</div>
           {isCh1Active && <button type="button" className="menu-item-btn item-ch1" onClick={() => handleDisconnectSpecificChannel(1)}>無線① を切断</button>}
           {isCh2Active && <button type="button" className="menu-item-btn item-ch2" onClick={() => handleDisconnectSpecificChannel(2)}>無線② を切断</button>}
-          {isCh3Active && tyrannyRole !== 'driver' && <button type="button" className="menu-item-btn item-ch3" onClick={() => handleDisconnectSpecificChannel(3)}>無線③ を切断</button>}
+          {isCh3Active && selectedRole !== 'driver' && <button type="button" className="menu-item-btn item-ch3" onClick={() => handleDisconnectSpecificChannel(3)}>無線③ を切断</button>}
+          {isCh4Active && selectedRole === 'signal' && <button type="button" className="menu-item-btn item-ch4" onClick={() => handleDisconnectSpecificChannel(4)}>無線④ を切断</button>}
         </div>
       )}
 
@@ -455,7 +468,7 @@ function App() {
 
       <div className="main-cockpit-grid">
         <div className="cockpit-left-monitor">
-          <div className="radio-display-lcd" style={{gap: '8px', padding: '15px'}}>
+          <div className="radio-display-lcd" style={{gap: '6px', padding: '12px'}}>
             <div className="lcd-line"><span className="lcd-lbl">{t.statusLabel}</span><span className={`lcd-val ${isConnected ? 'on' : 'off'}`}>{isConnected ? "ONLINE (独立受令中)" : t.standby}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.userLabel}</span><span className="lcd-val highlights">{userName}</span></div>
             <div className="lcd-line"><span className="lcd-lbl">{t.roleLabel}</span><span className="lcd-val role-name-color-lcd">{getRoleText(selectedRole)}</span></div>
@@ -469,13 +482,13 @@ function App() {
                 </span>
               </div>
               <div className="lcd-line" style={{border: 'none', alignItems: 'center'}}>
-                <span className="lcd-val val-mainch" style={{fontSize: '15px', color: !isCh1Active ? '#555' : muteCh1 ? '#768390' : '#39d353'}}>{!isCh1Active ? "--- (未接続)" : muteCh1 ? "--- (MUTE)" : ch1Label}</span>
+                <span className="lcd-val val-mainch" style={{fontSize: '14px', color: !isCh1Active ? '#555' : muteCh1 ? '#768390' : '#39d353'}}>{!isCh1Active ? "--- (未接続)" : muteCh1 ? "--- (MUTE)" : ch1Label}</span>
                 <button type="button" disabled={!isCh1Active} onClick={() => setMuteCh1(!muteCh1)} className="lcd-mute-sub-btn">{muteCh1 ? "🔇" : "🔊"}</button>
               </div>
             </div>
 
             {/* 無線② */}
-            <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px'}}>
+            <div style={{borderTop: '1px dashed #30363d', paddingTop: '4px'}}>
               <div className="lcd-line" style={{border: 'none'}}>
                 <span className="lcd-lbl" style={{color: '#ff9800'}}>📻 無線② [共通通報波]:</span>
                 <span className="lcd-channel-members-tag" style={{color: '#8b949e'}}>👥 {isCh2Active ? `${countCh2} / ${limitCh2}` : `0 / ${limitCh2}`}</span>
@@ -487,8 +500,8 @@ function App() {
             </div>
 
             {/* 無線③ */}
-            {selectedRole !== 'driver' ? (
-              <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px'}}>
+            {selectedRole !== 'driver' && (
+              <div style={{borderTop: '1px dashed #30363d', paddingTop: '4px'}}>
                 <div className="lcd-line" style={{border: 'none'}}>
                   <span className="lcd-lbl" style={{color: '#00d2ff'}}>📡 無線③ [信号指令連絡]:</span>
                   <span className="lcd-channel-members-tag" style={{color: countCh3 >= limitCh3 ? '#ff7b72' : '#58a6ff'}}>👥 {isCh3Active ? `${countCh3} / ${limitCh3}名` : `0 / ${limitCh3}名`}</span>
@@ -498,11 +511,27 @@ function App() {
                   <button type="button" disabled={!isCh3Active} onClick={() => setMuteCh3(!muteCh3)} className="lcd-mute-sub-btn">{muteCh3 ? "🔇" : "🔊"}</button>
                 </div>
               </div>
-            ) : (
-              <div style={{borderTop: '1px dashed #30363d', paddingTop: '5px', color: '#6e7681', fontSize: '11px', textAlign: 'center'}}>🔒 無線③ 運転士制限対象波</div>
             )}
 
-            <div className="lcd-line" style={{borderTop: '2px solid #30363d', paddingTop: '5px'}}><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${globalTotalCount} 名` : '---'}</span></div>
+            {/* 無線④: 信号係専用の閉塞回線 */}
+            {selectedRole === 'signal' && (
+              <div style={{borderTop: '1px dashed #30363d', paddingTop: '4px'}}>
+                <div className="lcd-line" style={{border: 'none'}}>
+                  <span className="lcd-lbl" style={{color: '#e06c75'}}>🔒 無線④ [隣駅閉塞連絡]:</span>
+                  <span className="lcd-channel-members-tag" style={{color: countCh4 >= limitCh4 ? '#ff7b72' : '#e5c07b'}}>👥 {isCh4Active ? `${countCh4} / ${limitCh4}名` : `0 / ${limitCh4}名`}</span>
+                </div>
+                <div className="lcd-line" style={{border: 'none', alignItems: 'center'}}>
+                  <span className="lcd-val" style={{fontSize: '14px', color: !isCh4Active ? '#555' : muteCh4 ? '#768390' : '#e06c75'}}>{!isCh4Active ? "--- (未接続)" : muteCh4 ? "--- (MUTE)" : ch4Label}</span>
+                  <button type="button" disabled={!isCh4Active} onClick={() => setMuteCh4(!muteCh4)} className="lcd-mute-sub-btn">{muteCh4 ? "🔇" : "🔊"}</button>
+                </div>
+              </div>
+            )}
+
+            {selectedRole === 'driver' && (
+              <div style={{borderTop: '1px dashed #30363d', paddingTop: '4px', color: '#6e7681', fontSize: '11px', textAlign: 'center'}}>🔒 無線③・④ 運転士制限対象波</div>
+            )}
+
+            <div className="lcd-line" style={{borderTop: '2px solid #30363d', paddingTop: '4px'}}><span className="lcd-lbl">{t.membersLabel}</span><span className="lcd-val green-lcd-text">{isConnected ? `${globalTotalCount} 名` : '---'}</span></div>
           </div>
 
           <div className="in-call-controls" style={{marginTop: '10px'}}>
@@ -539,6 +568,19 @@ function App() {
                   {isTalkingCh3 ? "✦ ③ 連絡波 送話中 ✦" : `③ 連絡線送信 [${pttKeyCh3}] ${!isCh3Active ? '(未入線)' : ''}`}
                 </button>
               )}
+
+              {/* 🚨 信号係専用：無線④送信ボタン */}
+              {selectedRole === 'signal' && (
+                <button 
+                  className={`ptt-hardware-button ptt-hardware-ch4 ${isTalkingCh4 ? 'active' : ''} ${!isCh4Active ? 'disabled-lock' : ''}`} 
+                  type="button" 
+                  style={{borderLeft: '4px solid #e06c75'}}
+                  onMouseDown={() => isCh4Active && setIsTalkingCh4(true)} 
+                  onMouseUp={() => setIsTalkingCh4(false)}
+                >
+                  {isTalkingCh4 ? "✦ ④ 閉塞波 送話中 ✦" : `④ 隣駅閉塞連絡送信 [${pttKeyCh4}] ${!isCh4Active ? '(未入線)' : ''}`}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -571,7 +613,7 @@ function App() {
               </div>
             )}
 
-            {/* 信号係 */}
+            {/* 信号係 (4ch化カスタム) */}
             {selectedRole === 'signal' && (
               <div className="sub-panel-card">
                 <h3>{t.signalPanelTitle} (Page {signalPage}/2)</h3>
@@ -582,14 +624,24 @@ function App() {
                 </div>
                 <div className="pager-nav-bar" style={{margin:'5px 0'}}><button type="button" onClick={() => setSignalPage(1)}>P1</button><button type="button" onClick={() => setSignalPage(2)}>P2</button></div>
                 
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px'}}>
-                  <button type="button" className="btn-action-primary" style={{background: isCh2Active ? '#2c3e50' : '#d35400'}} onClick={connectChannel2}>②共通波 開通</button>
-                  <button type="button" className="btn-action-primary" style={{background: isCh3Active ? '#2c3e50' : '#2980b9'}} onClick={connectChannel3}>③連絡波 開通</button>
+                {/* 4chコントロール用の開通グループ */}
+                <div style={{display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px'}}>
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px'}}>
+                    <button type="button" className="btn-action-primary" style={{background: isCh2Active ? '#2c3e50' : '#d35400', fontSize:'12px', padding:'8px 4px'}} onClick={connectChannel2}>
+                      {isCh2Active ? "②共通波 接続中" : "②共通波 開通"}
+                    </button>
+                    <button type="button" className="btn-action-primary" style={{background: isCh3Active ? '#2c3e50' : '#2980b9', fontSize:'12px', padding:'8px 4px'}} onClick={connectChannel3}>
+                      {isCh3Active ? "③指令連絡 接続中" : "③信号指令波 開通"}
+                    </button>
+                  </div>
+                  <button type="button" className="btn-action-primary" style={{background: isCh4Active ? '#2c3e50' : '#b34953', width: '100%', fontSize:'13px', padding:'10px'}} onClick={connectChannel4}>
+                    {isCh4Active ? "④隣駅閉塞波 接続中" : "🔒 ④隣駅閉塞連絡波 開通 (111.400MHz)"}
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* 💡 運転指令員：中国語を完全に排除した日本国内版 */}
+            {/* 運転指令員 */}
             {selectedRole === 'dispatcher' && (
               <div className="sub-panel-card">
                 <h3>📞 指令独立回線割当盤</h3>
@@ -599,7 +651,7 @@ function App() {
                   <button type="button" className="btn-action-primary" style={{fontSize:'12px', background: isCh3Active ? '#2c3e50' : '#2980b9'}} onClick={connectChannel3}>③連絡波開通</button>
                 </div>
                 <div style={{marginTop:'10px'}}>
-                  <input type="text" className="freq-digit-input" value={inputFreq} readOnly style={{fontSize:'16px', padding:'4px'} /* image_e3a8db.png 基準 */} />
+                  <input type="text" className="freq-digit-input" value={inputFreq} readOnly style={{fontSize:'16px', padding:'4px'}} />
                   <div className="screen-num-keypad" style={{gridTemplateColumns:'repeat(6, 1fr)', gap:'4px', marginTop:'5px'}}>
                     {[1,2,3,4,5,6,7,8,9,0,'修正'].map(n => <button key={n} className="btn-key-digit" style={{padding:'4px 0', fontSize:'12px'}} onClick={() => handleKeypadPress(n)}>{n}</button>)}
                   </div>

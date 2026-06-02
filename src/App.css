@@ -365,3 +365,49 @@ body {
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* 🌐 サーバー接続状態インジケーター用カスタムスタイル */
+.server-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: bold;
+  border: 1px solid #30363d;
+  background: #0d1117;
+  transition: all 0.3s ease;
+}
+
+.server-status-pill.online {
+  color: #39d353;
+  border-color: rgba(57, 211, 83, 0.4);
+  box-shadow: 0 0 8px rgba(57, 211, 83, 0.15);
+}
+
+.server-status-pill.offline {
+  color: #f85149;
+  border-color: rgba(248, 81, 73, 0.4);
+  box-shadow: 0 0 8px rgba(248, 81, 73, 0.15);
+}
+
+.server-status-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: currentColor;
+  display: inline-block;
+}
+
+/* 点滅アニメーション（オフライン時のみ警告として微点滅） */
+.server-status-pill.offline .dot {
+  animation: blink-red-status 1.5s infinite;
+}
+
+@keyframes blink-red-status {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
